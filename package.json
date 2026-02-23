@@ -12,17 +12,16 @@
     "lint": "eslint src mcp test --ext .ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
     "bullmq": "^5.0.0",
+    "dockerode": "^4.0.0",
     "express": "^4.18.2",
     "ioredis": "^5.3.2",
     "pino": "^9.0.0",
     "pino-pretty": "^11.0.0",
-    "simple-git": "^3.22.0",
-    "undici": "^6.0.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/dockerode": "^3.3.0",
     "@types/express": "^4.17.21",
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",

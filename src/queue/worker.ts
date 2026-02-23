@@ -1,13 +1,11 @@
-import path from 'path';
-import fs from 'fs/promises';
 import { Worker, type Job } from 'bullmq';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
-import { setupWorkspace, cleanupWorkspace } from '../workspace/setup.js';
-import { runClaudeAgent } from '../agent/runner.js';
+import { runTaskInContainer, destroyTaskContainer } from '../containers/manager.js';
 import { buildNewTaskPrompt, buildFeedbackPrompt } from '../agent/prompt.js';
-import { fetchCardAttachments, postTrelloComment } from '../trello/api.js';
-import type { NewTaskJob, FeedbackJob } from '../webhook/types.js';
+import { extractRepoUrl } from '../workspace/repo.js';
+import { postTrelloComment } from '../trello/api.js';
+import type { NewTaskJob, FeedbackJob, CleanupJob } from '../webhook/types.js';
 
 const connection = {
   host: config.REDIS_HOST,
@@ -17,78 +15,69 @@ const connection = {
 export const worker = new Worker(
   'tasks',
   async (job: Job) => {
-    if (job.name === 'new-task') {
-      await handleNewTask(job as Job<NewTaskJob>);
-    } else if (job.name === 'feedback') {
-      await handleFeedback(job as Job<FeedbackJob>);
-    } else {
-      logger.warn({ jobName: job.name }, 'Unknown job type — skipping');
+    switch (job.name) {
+      case 'new-task':
+        await handleNewTask(job as Job<NewTaskJob>);
+        break;
+      case 'feedback':
+        await handleFeedback(job as Job<FeedbackJob>);
+        break;
+      case 'cleanup':
+        await handleCleanup(job as Job<CleanupJob>);
+        break;
+      default:
+        logger.warn({ jobName: job.name }, 'Unknown job type — skipping');
     }
   },
   { connection, concurrency: 2 },
 );
 
 async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
-  const { cardId, cardShortLink, cardName, cardUrl } = job.data;
+  const { cardId, cardShortLink, cardName, cardDesc, cardUrl } = job.data;
   const log = logger.child({ cardId, cardName });
 
   log.info('Starting new-task job');
 
-  // Download any image attachments from the card
-  const imageDir = `/tmp/workspaces/${cardId}/images`;
-  await fs.mkdir(imageDir, { recursive: true });
-
-  // Determine whether we downloaded any images (scoped outside inner try)
-  let hasImages = false;
-  try {
-    const allAttachments = await fetchCardAttachments(cardId);
-    const imageAttachments = allAttachments.filter((a) =>
-      /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(a.name),
-    );
-    hasImages = imageAttachments.length > 0;
-    for (const attachment of imageAttachments) {
-      const dest = path.join(imageDir, attachment.name);
-      const res = await fetch(attachment.url, {
-        headers: { Authorization: `OAuth oauth_consumer_key="${config.TRELLO_API_KEY}", oauth_token="${config.TRELLO_TOKEN}"` },
-      });
-      const buf = Buffer.from(await res.arrayBuffer());
-      await fs.writeFile(dest, buf);
-      log.info({ file: attachment.name }, 'Downloaded attachment');
-    }
-  } catch (err) {
-    log.warn({ err }, 'Failed to download some attachments — continuing');
+  // Determine which repo to work on
+  const repoUrl = extractRepoUrl(cardDesc);
+  if (!repoUrl) {
+    const msg = 'Could not determine target repo. Add `repo: https://github.com/org/name` to the card description, or set DEFAULT_GITHUB_REPO.';
+    await postTrelloComment(cardId, `❌ ${msg}`).catch(() => {});
+    throw new Error(msg);
   }
 
   const branchName = `claude/${cardShortLink}`;
-  const workspaceDir = `/tmp/workspaces/${cardId}/repo`;
+
+  const prompt = buildNewTaskPrompt({
+    cardId,
+    cardName,
+    cardUrl,
+  });
 
   try {
-    await setupWorkspace({ workspaceDir, cardId, branchName });
-
-    const prompt = buildNewTaskPrompt({
-      cardId,
-      cardName,
-      cardUrl,
-      imageDir: hasImages ? imageDir : undefined,
+    const { exitCode, logs } = await runTaskInContainer({
+      cardShortLink,
+      repoUrl,
+      branchName,
+      prompt,
+      isFollowUp: false,
     });
 
-    await runClaudeAgent({ workspaceDir, prompt });
+    if (exitCode !== 0) {
+      const tail = logs.split('\n').slice(-20).join('\n');
+      await postTrelloComment(
+        cardId,
+        `❌ Claude exited with code ${exitCode}.\n\nLast output:\n\`\`\`\n${tail}\n\`\`\``,
+      ).catch(() => {});
+      throw new Error(`Worker container exited with code ${exitCode}`);
+    }
 
-    log.info('Claude Code finished successfully');
+    log.info('New task completed successfully');
   } catch (err) {
     log.error({ err }, 'new-task job failed');
-    await postTrelloComment(
-      cardId,
-      `❌ Claude failed to complete this task.\n\nError: ${err instanceof Error ? err.message : String(err)}`,
-    ).catch(() => {});
     throw err;
-  } finally {
-    await cleanupWorkspace(workspaceDir).catch(() => {});
   }
 }
-
-// Keep track of which branch is associated with each card for feedback jobs
-const cardBranchMap = new Map<string, string>();
 
 async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
   const { cardId, cardShortLink, cardUrl, commentText, commenterName } = job.data;
@@ -96,27 +85,49 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
 
   log.info({ commenter: commenterName }, 'Starting feedback job');
 
-  const branchName = cardBranchMap.get(cardId) ?? `claude/${cardShortLink}`;
-  const workspaceDir = `/tmp/workspaces/${cardId}-feedback/repo`;
+  const branchName = `claude/${cardShortLink}`;
+
+  // Determine repo URL — we need it even for follow-ups in case volume was lost
+  const repoUrl = extractRepoUrl(job.data.cardDesc ?? '');
+  if (!repoUrl) {
+    await postTrelloComment(cardId, '❌ Cannot process feedback — no repo URL found on card.').catch(() => {});
+    throw new Error('No repo URL for feedback job');
+  }
+
+  const prompt = buildFeedbackPrompt({ cardId, cardUrl, commentText, commenterName });
 
   try {
-    await setupWorkspace({ workspaceDir, cardId, branchName, checkout: true });
+    const { exitCode, logs } = await runTaskInContainer({
+      cardShortLink,
+      repoUrl,
+      branchName,
+      prompt,
+      isFollowUp: true,
+    });
 
-    const prompt = buildFeedbackPrompt({ cardId, cardUrl, commentText, commenterName });
+    if (exitCode !== 0) {
+      const tail = logs.split('\n').slice(-20).join('\n');
+      await postTrelloComment(
+        cardId,
+        `❌ Claude failed to process feedback (exit ${exitCode}).\n\n\`\`\`\n${tail}\n\`\`\``,
+      ).catch(() => {});
+      throw new Error(`Feedback container exited with code ${exitCode}`);
+    }
 
-    await runClaudeAgent({ workspaceDir, prompt });
-
-    log.info('Feedback handled successfully');
+    log.info('Feedback processed successfully');
   } catch (err) {
     log.error({ err }, 'feedback job failed');
-    await postTrelloComment(
-      cardId,
-      `❌ Claude failed to process the feedback.\n\nError: ${err instanceof Error ? err.message : String(err)}`,
-    ).catch(() => {});
     throw err;
-  } finally {
-    await cleanupWorkspace(workspaceDir).catch(() => {});
   }
+}
+
+async function handleCleanup(job: Job<CleanupJob>): Promise<void> {
+  const { cardShortLink } = job.data;
+  const log = logger.child({ cardShortLink });
+
+  log.info('Cleaning up container and volume for closed/merged PR');
+  await destroyTaskContainer(cardShortLink);
+  log.info('Cleanup complete');
 }
 
 worker.on('completed', (job) => {

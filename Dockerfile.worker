@@ -1,0 +1,55 @@
+FROM node:20-slim
+
+# Install system deps + build tools for native modules across languages
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    ca-certificates \
+    gnupg \
+    build-essential \
+    python3 \
+    python3-pip \
+    python3-venv \
+    libssl-dev \
+    pkg-config \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# mise — universal runtime version manager
+# Automatically reads .mise.toml / .tool-versions / .nvmrc / .python-version
+# and installs the correct Node, Python, Go, Ruby, Rust, Java, etc.
+RUN curl https://mise.run | sh
+ENV PATH="/root/.local/share/mise/shims:/root/.local/bin:${PATH}"
+RUN echo 'eval "$(/root/.local/bin/mise activate bash)"' >> /root/.bashrc \
+    && mise settings set experimental true
+
+# gh CLI — used by Claude to open PRs, check status, etc.
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update && apt-get install -y gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
+
+# Playwright + headless Chromium
+RUN npx playwright install --with-deps chromium
+
+# Trello MCP server — baked into the image so every worker has it
+WORKDIR /opt/mcp/trello-server
+COPY mcp/trello-server/package.json mcp/trello-server/package-lock.json* ./
+RUN npm ci
+COPY mcp/trello-server/ ./
+RUN npm run build
+
+# Working directory for cloned repos — this path gets a persistent volume
+WORKDIR /workspace
+
+# The orchestrator sends the prompt via env var CLAUDE_PROMPT.
+# The entrypoint: set up MCP config, then run claude.
+COPY worker-entrypoint.sh /usr/local/bin/worker-entrypoint.sh
+RUN chmod +x /usr/local/bin/worker-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/worker-entrypoint.sh"]

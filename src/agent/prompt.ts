@@ -33,11 +33,28 @@ ${imageSection}
 
 1. Read the Trello card fully using the trello MCP \`get_card\` tool
 2. Explore this codebase to understand its structure and conventions
-3. Implement the solution described in the card
-4. Run the project's test suite (check for npm test, pytest, cargo test, etc.)
-5. Fix any test failures before proceeding
+3. Set up the runtime and install dependencies:
+   - If a \`.mise.toml\`, \`.tool-versions\`, \`.nvmrc\`, or \`.python-version\` file exists,
+     run \`mise install\` first to install the correct runtime version
+   - Then install project dependencies based on what you find:
+     | File present | Command |
+     |---|---|
+     | \`package-lock.json\` | \`npm ci\` |
+     | \`yarn.lock\` | \`yarn install --frozen-lockfile\` |
+     | \`pnpm-lock.yaml\` | \`pnpm install --frozen-lockfile\` |
+     | \`bun.lockb\` | \`bun install\` |
+     | \`requirements.txt\` | \`pip install -r requirements.txt\` |
+     | \`pyproject.toml\` + poetry | \`poetry install\` |
+     | \`pyproject.toml\` + uv | \`uv sync\` |
+     | \`Pipfile\` | \`pipenv install\` |
+     | \`go.mod\` | \`go mod download\` |
+     | \`Cargo.toml\` | \`cargo fetch\` |
+     | \`Gemfile\` | \`bundle install\` |
+   - If installation fails, read the error and fix it (missing system dep, wrong node version, etc.)
+4. Implement the solution described in the card
+5. Run the project's test suite and fix any failures before proceeding
 6. If this is a frontend task, use the Playwright MCP server to:
-   a. Start the dev server (e.g., npm run dev)
+   a. Start the dev server (e.g., \`npm run dev\`)
    b. Navigate to the relevant pages
    c. Take screenshots and compare against the design references
    d. Iterate until the visual output matches
@@ -79,8 +96,9 @@ Comment: "${commentText}"
 
 1. Read the Trello card using the trello MCP \`get_card\` tool for full context
 2. Understand what change or fix the reviewer is asking for
-3. Implement the requested changes
-4. Run the test suite and ensure all tests pass
+3. Run \`mise install\` if a runtime config file exists, then install project dependencies
+4. Implement the requested changes
+5. Run the test suite and ensure all tests pass
 5. Commit and push your changes to the existing PR branch
 6. Post a reply on the Trello card using the trello MCP \`add_comment\` tool summarizing
    what you changed in response to the feedback

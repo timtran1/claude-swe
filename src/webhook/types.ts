@@ -59,6 +59,30 @@ export interface FeedbackJob {
   cardId: string;
   cardShortLink: string;
   cardUrl: string;
+  cardDesc: string;
   commentText: string;
   commenterName: string;
+}
+
+export interface CleanupJob {
+  cardShortLink: string;
+  prUrl?: string;
+  reason: 'merged' | 'closed';
+}
+
+// GitHub webhook payloads (subset of what we need)
+export interface GitHubPRWebhookPayload {
+  action: 'opened' | 'closed' | 'merged' | 'synchronize' | string;
+  pull_request: {
+    number: number;
+    html_url: string;
+    head: {
+      ref: string; // branch name, e.g. "claude/abc123"
+    };
+    merged: boolean;
+    state: string;
+  };
+  repository: {
+    full_name: string;
+  };
 }

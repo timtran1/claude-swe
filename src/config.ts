@@ -8,14 +8,16 @@ const envSchema = z.object({
   TRELLO_BOARD_ID: z.string().min(1),
 
   GITHUB_TOKEN: z.string().min(1),
+  GITHUB_WEBHOOK_SECRET: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().min(1),
 
   WEBHOOK_BASE_URL: z.string().url(),
 
+  // Docker worker image name (built from Dockerfile.worker)
+  WORKER_IMAGE: z.string().default('claude-swe-worker:latest'),
+
   REDIS_HOST: z.string().default('redis'),
   REDIS_PORT: z.coerce.number().default(6379),
-
-  CLAUDE_TIMEOUT_MS: z.coerce.number().default(1_800_000),
 
   PORT: z.coerce.number().default(3000),
 });

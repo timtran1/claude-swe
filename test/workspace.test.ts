@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractRepoUrl } from '../src/workspace/setup.js';
+import { extractRepoUrl } from '../src/workspace/repo.js';
 
 describe('extractRepoUrl', () => {
   it('extracts repo URL from card description', () => {
