@@ -1,0 +1,35 @@
+name: Claude SWE Main CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+          SHA=${GITHUB_SHA::7}
+          DATE=$(date -u +%Y%m%d%H%M%S)
+          TAG=$DATE-$SHA
+          docker build -t $IMAGE:$TAG .
+          docker push $IMAGE:$TAG
+          echo "✅ Pushed image: $IMAGE:$TAG"

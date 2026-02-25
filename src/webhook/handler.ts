@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import type { Request, Response } from 'express';
-import { config } from '../config.js';
+import { config, getBoardConfig } from '../config.js';
 import { logger } from '../logger.js';
 import { taskQueue } from '../queue/queue.js';
 import type {
@@ -12,11 +12,17 @@ import type {
 } from './types.js';
 
 // --- Trello webhook ---
+// Trello signs requests with HMAC-SHA1 using the OAuth token as the key.
 
 function verifyTrelloSignature(rawBody: Buffer, signature: string): boolean {
-  const content = rawBody.toString('utf8') + config.WEBHOOK_BASE_URL + '/webhooks/trello';
+  const token = config.trello.token;
+  if (!token) {
+    logger.warn('Trello token not configured — skipping signature verification');
+    return true;
+  }
+  const content = rawBody.toString('utf8') + config.server.webhookBaseUrl + '/webhooks/trello';
   const expected = crypto
-    .createHmac('sha1', config.TRELLO_WEBHOOK_SECRET)
+    .createHmac('sha1', token)
     .update(content)
     .digest('base64');
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
@@ -64,11 +70,20 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
   if (type === 'addMemberToCard') {
     const card = data.card;
     const member = data.member;
+    const board = data.board;
 
-    if (!card) return;
+    if (!card || !board) return;
 
-    const claudeUsername = process.env.TRELLO_CLAUDE_USERNAME ?? 'claude';
-    if (member?.username !== claudeUsername) return;
+    const boardConfig = getBoardConfig(board.id);
+    if (!boardConfig) return;
+
+    if (member?.username !== config.trello.botUsername) return;
+
+    // If includeLists is configured, only react to cards in those lists
+    if (boardConfig.includeLists.length > 0 && !boardConfig.includeLists.includes(card.idList)) {
+      logger.info({ cardId: card.id, listId: card.idList }, 'Card not in an included list — ignoring');
+      return;
+    }
 
     const job: NewTaskJob = {
       cardId: card.id,
@@ -76,6 +91,7 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
       cardName: card.name,
       cardDesc: card.desc,
       cardUrl: card.url,
+      doneListId: boardConfig.done?.listId,
     };
 
     await taskQueue.add('new-task', job, {
@@ -90,11 +106,19 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
   if (type === 'commentCard') {
     const card = data.card;
     const commentText = data.text;
+    const board = data.board;
 
-    if (!card || !commentText) return;
+    if (!card || !commentText || !board) return;
 
-    const botUsername = process.env.TRELLO_CLAUDE_USERNAME ?? 'claude';
-    if (memberCreator.username === botUsername) return;
+    const boardConfig = getBoardConfig(board.id);
+    if (!boardConfig) return;
+
+    if (memberCreator.username === config.trello.botUsername) return;
+
+    // If includeLists is configured, only react to cards in those lists
+    if (boardConfig.includeLists.length > 0 && !boardConfig.includeLists.includes(card.idList)) {
+      return;
+    }
 
     const job: FeedbackJob = {
       cardId: card.id,
@@ -103,6 +127,7 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
       cardDesc: card.desc,
       commentText,
       commenterName: memberCreator.fullName,
+      doneListId: boardConfig.done?.listId,
     };
 
     await taskQueue.add('feedback', job, {
@@ -118,8 +143,13 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
 // --- GitHub webhook ---
 
 function verifyGitHubSignature(rawBody: Buffer, signature: string): boolean {
+  const secret = config.github.webhookSecret;
+  if (!secret) {
+    logger.warn('GitHub webhook secret not configured — skipping signature verification');
+    return true;
+  }
   const expected = 'sha256=' + crypto
-    .createHmac('sha256', config.GITHUB_WEBHOOK_SECRET)
+    .createHmac('sha256', secret)
     .update(rawBody)
     .digest('hex');
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));

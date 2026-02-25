@@ -7,11 +7,12 @@ RUN apt-get update && apt-get install -y curl ca-certificates && rm -rf /var/lib
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build
+RUN npm prune --omit=dev
 
 EXPOSE 3000
 

@@ -1,0 +1,40 @@
+{
+  "trello": {
+    "apiKey": "env.TRELLO_API_KEY",
+    "token": "env.TRELLO_TOKEN",
+    "botUsername": "claude-bot",
+    "boards": [
+      {
+        "id": "BOARD_ID",
+        "includeLists": ["LIST_ID_1", "LIST_ID_2"],
+        "done": {
+          "listId": "DONE_LIST_ID"
+        }
+      }
+    ]
+  },
+  "github": {
+    "token": "env.GITHUB_TOKEN",
+    "webhookSecret": "env.GITHUB_WEBHOOK_SECRET",
+    "defaultRepo": ""
+  },
+  "anthropic": {
+    "apiKey": "env.ANTHROPIC_API_KEY"
+  },
+  "server": {
+    "port": 3000,
+    "webhookBaseUrl": "https://your-public-url.example.com"
+  },
+  "redis": {
+    "host": "redis",
+    "port": 6379
+  },
+  "containers": {
+    "backend": "docker",
+    "workerImage": "claude-swe-worker:latest",
+    "kubernetes": {
+      "namespace": "default",
+      "storageClass": ""
+    }
+  }
+}

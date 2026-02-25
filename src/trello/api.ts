@@ -3,7 +3,7 @@ import { config } from '../config.js';
 const BASE = 'https://api.trello.com/1';
 
 function authParams(): string {
-  return `key=${config.TRELLO_API_KEY}&token=${config.TRELLO_TOKEN}`;
+  return `key=${config.trello.apiKey ?? ''}&token=${config.trello.token ?? ''}`;
 }
 
 async function trelloFetch<T>(path: string, options?: RequestInit): Promise<T> {

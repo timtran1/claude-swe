@@ -16,9 +16,16 @@ app.use(
   }),
 );
 
-// Health check
+// Health check — shows which integrations have credentials configured
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() });
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    boards: config.trello.boards.length,
+    trello: config.trello.token !== null,
+    github: config.github.token !== null,
+    anthropic: config.anthropic.apiKey !== null,
+  });
 });
 
 // List active worker containers
@@ -33,22 +40,69 @@ app.all('/webhooks/trello', handleTrelloWebhook);
 // GitHub webhook — handles PR closed → container cleanup
 app.post('/webhooks/github', handleGitHubWebhook);
 
-const server = app.listen(config.PORT, () => {
-  logger.info({ port: config.PORT }, 'Webhook server listening');
-  logger.info('Worker started and waiting for jobs');
-});
+async function ensureTrelloWebhooks(): Promise<void> {
+  const { apiKey, token, boards } = config.trello;
+  const { webhookBaseUrl } = config.server;
 
-// Graceful shutdown
-async function shutdown(signal: string): Promise<void> {
-  logger.info({ signal }, 'Shutting down');
-  server.close();
-  await gracefulShutdown();
-  process.exit(0);
+  if (!apiKey || !token || !webhookBaseUrl) {
+    logger.warn('Trello webhook auto-registration skipped — missing apiKey, token, or webhookBaseUrl');
+    return;
+  }
+
+  let existing: Array<{ idModel: string; callbackURL: string }>;
+  try {
+    const res = await fetch(
+      `https://api.trello.com/1/tokens/${token}/webhooks?key=${apiKey}&token=${token}`,
+    );
+    existing = await res.json() as typeof existing;
+  } catch (err) {
+    logger.warn({ err }, 'Failed to fetch existing Trello webhooks');
+    return;
+  }
+
+  for (const board of boards) {
+    const callbackURL = `${webhookBaseUrl}/webhooks/trello`;
+    const alreadyRegistered = existing.some(
+      (w) => w.idModel === board.id && w.callbackURL === callbackURL,
+    );
+
+    if (alreadyRegistered) {
+      logger.info({ boardId: board.id }, 'Trello webhook already registered');
+      continue;
+    }
+
+    try {
+      await fetch(`https://api.trello.com/1/webhooks?key=${apiKey}&token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callbackURL, idModel: board.id, description: 'Claude SWE Agent' }),
+      });
+      logger.info({ boardId: board.id }, 'Registered Trello webhook');
+    } catch (err) {
+      logger.warn({ boardId: board.id, err }, 'Failed to register Trello webhook');
+    }
+  }
 }
-
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
 
 process.on('unhandledRejection', (reason) => {
   logger.error({ reason }, 'Unhandled promise rejection');
 });
+
+(async () => {
+  await ensureTrelloWebhooks();
+
+  const server = app.listen(config.server.port, () => {
+    logger.info({ port: config.server.port }, 'Webhook server listening');
+    logger.info('Worker started and waiting for jobs');
+  });
+
+  async function shutdown(signal: string): Promise<void> {
+    logger.info({ signal }, 'Shutting down');
+    server.close();
+    await gracefulShutdown();
+    process.exit(0);
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+})();

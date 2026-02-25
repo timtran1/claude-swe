@@ -5,14 +5,24 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file: .env
+    environment:
+      - CONFIG_PATH=/app/config.json
     ports:
       - "3000:3000"
     volumes:
       # Mount Docker socket so the orchestrator can create/destroy worker containers
       - /var/run/docker.sock:/var/run/docker.sock
+      # Mount config file (non-sensitive settings + env.KEY references for secrets)
+      - ./config.json:/app/config.json:ro
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   # Worker base image — pre-built so orchestrator can spin up containers instantly

@@ -8,8 +8,8 @@ import { postTrelloComment } from '../trello/api.js';
 import type { NewTaskJob, FeedbackJob, CleanupJob } from '../webhook/types.js';
 
 const connection = {
-  host: config.REDIS_HOST,
-  port: config.REDIS_PORT,
+  host: config.redis.host,
+  port: config.redis.port,
 };
 
 export const worker = new Worker(
@@ -61,6 +61,7 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
       branchName,
       prompt,
       isFollowUp: false,
+      doneListId: job.data.doneListId,
     });
 
     if (exitCode !== 0) {
@@ -103,6 +104,7 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
       branchName,
       prompt,
       isFollowUp: true,
+      doneListId: job.data.doneListId,
     });
 
     if (exitCode !== 0) {
