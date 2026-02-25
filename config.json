@@ -9,14 +9,14 @@
         "includeLists": ["LIST_ID_1", "LIST_ID_2"],
         "done": {
           "listId": "DONE_LIST_ID"
-        }
+        },
+        "repos": ["https://github.com/owner/repo"]
       }
     ]
   },
   "github": {
     "token": "env.GITHUB_TOKEN",
     "webhookSecret": "env.GITHUB_WEBHOOK_SECRET",
-    "defaultRepo": ""
   },
   "anthropic": {
     "apiKey": "env.ANTHROPIC_API_KEY"

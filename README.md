@@ -47,7 +47,7 @@ Create a Trello account for Claude (e.g., `claude-bot`) and add it to your board
 
 ### 2. Get Trello credentials
 
-**API key**: go to `https://trello.com/power-ups/admin`, create a Power-Up, copy the API key.
+**API key**: go to `https://trello.com/power-ups/admin`, create a Power-Up, copy and save the API key.
 
 **Token**: log in to Trello as the bot account, then visit:
 ```
@@ -88,7 +88,6 @@ Edit `config.json` — non-sensitive settings live here:
   "github": {
     "token": "env.GITHUB_TOKEN",
     "webhookSecret": "env.GITHUB_WEBHOOK_SECRET",
-    "defaultRepo": ""
   },
   "anthropic": { "apiKey": "env.ANTHROPIC_API_KEY" },
   "server": { "port": 3000, "webhookBaseUrl": "https://your-server.example.com" },
@@ -212,7 +211,6 @@ mcp/
 | `trello.boards[].done.listId` | List ID to move cards to on completion (omit to skip) |
 | `github.token` | GitHub PAT (repo + PR permissions) — use `"env.GITHUB_TOKEN"` |
 | `github.webhookSecret` | GitHub webhook secret — use `"env.GITHUB_WEBHOOK_SECRET"` |
-| `github.defaultRepo` | Fallback repo URL if card doesn't specify one |
 | `anthropic.apiKey` | Anthropic API key — use `"env.ANTHROPIC_API_KEY"` |
 | `server.port` | HTTP server port (default: `3000`) |
 | `server.webhookBaseUrl` | Public URL of this server |
