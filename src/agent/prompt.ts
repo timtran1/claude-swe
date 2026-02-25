@@ -34,10 +34,23 @@ export function buildNewTaskPrompt(opts: NewTaskPromptOptions): string {
 
   const imageSection = imageDir
     ? `
-There are visual design references (screenshots/mockups) in ${imageDir}/.
-Read these images to understand the expected UI before implementing frontend changes.
-Use the Playwright MCP server to start the dev server, take screenshots of your
-implementation, and visually verify it matches the designs. Iterate until it looks right.
+## Visual References
+
+Screenshots and mockups from the Trello card have been saved to ${imageDir}/.
+Check this directory after reading the card — if it contains images, they are the
+visual specification for this task. Study them carefully before writing any code.
+
+## Visual Verification
+
+If this task involves any frontend or UI changes:
+1. Read the images in ${imageDir}/ to understand exactly what the result should look like
+2. After implementing, use the Playwright MCP server to verify your work visually:
+   a. Start the dev server (e.g. \`npm run dev\`)
+   b. Use Playwright to navigate to the relevant pages
+   c. Take screenshots and compare them against the reference images in ${imageDir}/
+   d. Fix, screenshot, compare — iterate until your implementation matches the designs
+3. Do not commit until the UI visually matches the references
+4. Paste a final screenshot into the PR description as evidence
 `
     : '';
 
@@ -83,14 +96,16 @@ ${buildRepoSection(repos)}
    - If installation fails, read the error and fix it (missing system dep, wrong node version, etc.)
 6. Implement the solution described in the card
 7. Run the project's test suite and fix any failures before proceeding
-8. If this is a frontend task, use the Playwright MCP server to:
-   a. Start the dev server (e.g., \`npm run dev\`)
-   b. Navigate to the relevant pages
-   c. Take screenshots and compare against the design references
-   d. Iterate until the visual output matches
+8. If this is a frontend task:
+   a. Check /workspace/.card-images/ — if reference images are present, study them first
+   b. Start the dev server (e.g. \`npm run dev\`)
+   c. Use the Playwright MCP server to navigate to the relevant pages and take screenshots
+   d. Compare your screenshots against the reference images — iterate until they match
+   e. Do not move forward until the UI visually matches the designs
 9. Commit all changes with a clear, descriptive message
 10. Push the branch and open a PR using the gh CLI:
    \`gh pr create --title "<task name>" --body "<summary of changes>"\`
+   If this was a frontend task, paste a final Playwright screenshot into the PR body
 11. Move the Trello card to the Done list using the trello MCP \`move_card\` tool
 12. Post the PR URL as a comment on the Trello card using the trello MCP \`add_comment\` tool
 
@@ -130,8 +145,12 @@ Comment: "${commentText}"
 3. Run \`mise install\` if a runtime config file exists, then install project dependencies
 4. Implement the requested changes
 5. Run the test suite and ensure all tests pass
-6. Commit and push your changes to the existing PR branch
-7. Post a reply on the Trello card using the trello MCP \`add_comment\` tool summarizing
+6. If the feedback relates to UI or visual appearance:
+   a. Check /workspace/.card-images/ for any reference screenshots on the card
+   b. Start the dev server and use the Playwright MCP server to take screenshots
+   c. Verify the updated UI looks correct before committing
+7. Commit and push your changes to the existing PR branch
+8. Post a reply on the Trello card using the trello MCP \`add_comment\` tool summarizing
    what you changed in response to the feedback
 
 ## Important Rules

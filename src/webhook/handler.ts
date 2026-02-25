@@ -25,7 +25,10 @@ function verifyTrelloSignature(rawBody: Buffer, signature: string): boolean {
     .createHmac('sha1', token)
     .update(content)
     .digest('base64');
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  const expectedBuf = Buffer.from(expected);
+  const signatureBuf = Buffer.from(signature);
+  if (expectedBuf.length !== signatureBuf.length) return false;
+  return crypto.timingSafeEqual(expectedBuf, signatureBuf);
 }
 
 export function handleTrelloWebhook(req: Request, res: Response): void {
@@ -154,7 +157,10 @@ function verifyGitHubSignature(rawBody: Buffer, signature: string): boolean {
     .createHmac('sha256', secret)
     .update(rawBody)
     .digest('hex');
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  const expectedBuf = Buffer.from(expected);
+  const signatureBuf = Buffer.from(signature);
+  if (expectedBuf.length !== signatureBuf.length) return false;
+  return crypto.timingSafeEqual(expectedBuf, signatureBuf);
 }
 
 export function handleGitHubWebhook(req: Request, res: Response): void {

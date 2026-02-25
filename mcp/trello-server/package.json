@@ -2,6 +2,7 @@
   "name": "trello-mcp-server",
   "version": "1.0.0",
   "description": "MCP server exposing Trello tools to Claude",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

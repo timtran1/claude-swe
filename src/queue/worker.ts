@@ -46,11 +46,13 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
     cardName,
     cardUrl,
     repos,
+    imageDir: '/workspace/.card-images',
   });
 
   try {
     const { exitCode, logs } = await runTaskInContainer({
       cardShortLink,
+      cardId,
       branchName,
       prompt,
       isFollowUp: false,
@@ -87,6 +89,7 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
   try {
     const { exitCode, logs } = await runTaskInContainer({
       cardShortLink,
+      cardId,
       branchName,
       prompt,
       isFollowUp: true,

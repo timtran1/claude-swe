@@ -46,7 +46,7 @@ export class KubernetesBackend implements ContainerBackend {
   }
 
   async runTask(opts: RunTaskOptions): Promise<{ exitCode: number; logs: string }> {
-    const { cardShortLink, prompt, doneListId } = opts;
+    const { cardShortLink, cardId, prompt, doneListId } = opts;
     const jobName = this.jobName(cardShortLink);
     const pvcName = this.pvcName(cardShortLink);
     const log = logger.child({ job: jobName, namespace: this.namespace });
@@ -93,6 +93,7 @@ export class KubernetesBackend implements ContainerBackend {
                   { name: 'GITHUB_TOKEN',          value: config.github.token ?? '' },
                   { name: 'TRELLO_API_KEY',        value: config.trello.apiKey ?? '' },
                   { name: 'TRELLO_TOKEN',          value: config.trello.token ?? '' },
+                  { name: 'CARD_ID',               value: cardId },
                   { name: 'TRELLO_DONE_LIST_ID',   value: doneListId ?? '' },
                   { name: 'CI',                    value: '1' },
                   { name: 'TERM',                  value: 'dumb' },

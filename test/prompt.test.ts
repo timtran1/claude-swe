@@ -48,26 +48,29 @@ describe('buildNewTaskPrompt', () => {
     expect(prompt).toContain('gh repo clone');
   });
 
-  it('includes Playwright instructions when imageDir is provided', () => {
+  it('includes visual reference and Playwright instructions when imageDir is provided', () => {
     const prompt = buildNewTaskPrompt({
       cardId: 'card-123',
       cardName: 'Redesign header',
       cardUrl: 'https://trello.com/c/abc',
       repos: [],
-      imageDir: '/tmp/workspaces/card-123/images',
+      imageDir: '/workspace/.card-images',
     });
-    expect(prompt).toContain('/tmp/workspaces/card-123/images');
+    expect(prompt).toContain('/workspace/.card-images');
     expect(prompt).toContain('Playwright');
+    expect(prompt).toContain('Visual References');
+    expect(prompt).toContain('Visual Verification');
   });
 
-  it('omits Playwright instructions when no imageDir', () => {
+  it('omits visual sections when no imageDir is provided', () => {
     const prompt = buildNewTaskPrompt({
       cardId: 'card-123',
       cardName: 'Fix API bug',
       cardUrl: 'https://trello.com/c/abc',
       repos: [],
     });
-    expect(prompt).not.toContain('/tmp/images');
+    expect(prompt).not.toContain('Visual References');
+    expect(prompt).not.toContain('Visual Verification');
   });
 
   it('instructs Claude to move card to Done and post PR link', () => {

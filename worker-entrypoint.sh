@@ -26,6 +26,12 @@ cat > /workspace/.claude/settings.local.json <<MCPEOF
 }
 MCPEOF
 
+# Download card images for visual reference
+IMAGE_DIR="/workspace/.card-images"
+mkdir -p "$IMAGE_DIR"
+node /opt/mcp/trello-server/dist/download-images.js "${CARD_ID}" "$IMAGE_DIR" \
+  || echo "Warning: image download failed or no images found — continuing"
+
 # Configure git
 git config --global user.name "Claude SWE"
 git config --global user.email "claude-swe@noreply.example.com"

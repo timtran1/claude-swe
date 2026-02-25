@@ -195,6 +195,7 @@ src/
 mcp/
   trello-server/        — MCP server baked into worker image
     index.ts            — Tools: get_card, move_card, add_comment, get_card_comments, get_board_lists
+    download-images.ts  — CLI script run at container startup to fetch card images to /workspace/.card-images/
 ```
 
 ## Config reference

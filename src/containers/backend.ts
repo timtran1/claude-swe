@@ -1,5 +1,7 @@
 export interface RunTaskOptions {
   cardShortLink: string;
+  /** Full Trello card ID, used by the worker container to download card images */
+  cardId: string;
   branchName: string;
   prompt: string;
   /** If true, re-use existing workspace (for feedback on existing PR) */
