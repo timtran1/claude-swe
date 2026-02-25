@@ -41,13 +41,13 @@ export function handleTrelloWebhook(req: Request, res: Response): void {
   const rawBody: Buffer = (req as Request & { rawBody: Buffer }).rawBody;
 
   if (!signature) {
-    logger.warn('Webhook received without x-trello-webhook header');
+    logger.warn({ phase: 'webhook' }, 'Trello webhook received without x-trello-webhook header');
     res.sendStatus(401);
     return;
   }
 
   if (!verifyTrelloSignature(rawBody, signature)) {
-    logger.warn('Webhook signature verification failed');
+    logger.warn({ phase: 'webhook' }, 'Trello webhook signature verification failed');
     res.sendStatus(401);
     return;
   }
@@ -56,12 +56,18 @@ export function handleTrelloWebhook(req: Request, res: Response): void {
   const action = payload?.action;
 
   if (!action) {
+    logger.info({ phase: 'webhook' }, 'Trello webhook received with no action — acknowledging');
     res.sendStatus(200);
     return;
   }
 
+  logger.info(
+    { phase: 'webhook', actionType: action.type, card: action.data?.card?.shortLink },
+    'Trello webhook received',
+  );
+
   routeTrelloAction(action).catch((err) => {
-    logger.error({ err }, 'Failed to enqueue Trello webhook action');
+    logger.error({ err, phase: 'webhook' }, 'Failed to enqueue Trello webhook action');
   });
 
   res.sendStatus(200);
@@ -75,16 +81,31 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
     const member = data.member;
     const board = data.board;
 
-    if (!card || !board) return;
+    if (!card || !board) {
+      logger.warn({ phase: 'webhook', actionType: type }, 'addMemberToCard missing card or board data — ignoring');
+      return;
+    }
 
     const boardConfig = getBoardConfig(board.id);
-    if (!boardConfig) return;
+    if (!boardConfig) {
+      logger.info({ phase: 'webhook', boardId: board.id }, 'Board not configured — ignoring addMemberToCard');
+      return;
+    }
 
-    if (member?.username !== config.trello.botUsername) return;
+    if (member?.username !== config.trello.botUsername) {
+      logger.info(
+        { phase: 'webhook', cardId: card.id, member: member?.username },
+        'Member added is not the bot — ignoring',
+      );
+      return;
+    }
 
     // If includeLists is configured, only react to cards in those lists
     if (boardConfig.includeLists.length > 0 && !boardConfig.includeLists.includes(card.idList)) {
-      logger.info({ cardId: card.id, listId: card.idList }, 'Card not in an included list — ignoring');
+      logger.info(
+        { phase: 'webhook', cardId: card.id, listId: card.idList },
+        'Card not in an included list — ignoring',
+      );
       return;
     }
 
@@ -103,7 +124,10 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
       backoff: { type: 'exponential', delay: 10_000 },
     });
 
-    logger.info({ cardId: card.id, cardName: card.name }, 'Enqueued new-task');
+    logger.info(
+      { phase: 'webhook', cardId: card.id, cardShortLink: card.shortLink, cardName: card.name },
+      'Enqueued new-task job',
+    );
     return;
   }
 
@@ -112,15 +136,28 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
     const commentText = data.text;
     const board = data.board;
 
-    if (!card || !commentText || !board) return;
+    if (!card || !commentText || !board) {
+      logger.warn({ phase: 'webhook', actionType: type }, 'commentCard missing card, text, or board — ignoring');
+      return;
+    }
 
     const boardConfig = getBoardConfig(board.id);
-    if (!boardConfig) return;
+    if (!boardConfig) {
+      logger.info({ phase: 'webhook', boardId: board.id }, 'Board not configured — ignoring commentCard');
+      return;
+    }
 
-    if (memberCreator.username === config.trello.botUsername) return;
+    if (memberCreator.username === config.trello.botUsername) {
+      logger.info({ phase: 'webhook', cardId: card.id }, 'Ignoring comment from bot itself');
+      return;
+    }
 
     // If includeLists is configured, only react to cards in those lists
     if (boardConfig.includeLists.length > 0 && !boardConfig.includeLists.includes(card.idList)) {
+      logger.info(
+        { phase: 'webhook', cardId: card.id, listId: card.idList },
+        'Card not in an included list — ignoring comment',
+      );
       return;
     }
 
@@ -140,9 +177,14 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
       backoff: { type: 'exponential', delay: 10_000 },
     });
 
-    logger.info({ cardId: card.id, commenter: memberCreator.username }, 'Enqueued feedback');
+    logger.info(
+      { phase: 'webhook', cardId: card.id, cardShortLink: card.shortLink, commenter: memberCreator.username },
+      'Enqueued feedback job',
+    );
     return;
   }
+
+  logger.info({ phase: 'webhook', actionType: type }, 'Unhandled Trello action type — ignoring');
 }
 
 // --- GitHub webhook ---
@@ -169,21 +211,25 @@ export function handleGitHubWebhook(req: Request, res: Response): void {
   const event = req.headers['x-github-event'] as string | undefined;
 
   if (!signature) {
-    logger.warn('GitHub webhook received without signature header');
+    logger.warn({ phase: 'webhook' }, 'GitHub webhook received without signature header');
     res.sendStatus(401);
     return;
   }
 
   if (!verifyGitHubSignature(rawBody, signature)) {
-    logger.warn('GitHub webhook signature verification failed');
+    logger.warn({ phase: 'webhook' }, 'GitHub webhook signature verification failed');
     res.sendStatus(401);
     return;
   }
 
+  logger.info({ phase: 'webhook', event }, 'GitHub webhook received');
+
   if (event === 'pull_request') {
     routeGitHubPR(req.body as GitHubPRWebhookPayload).catch((err) => {
-      logger.error({ err }, 'Failed to process GitHub PR webhook');
+      logger.error({ err, phase: 'webhook' }, 'Failed to process GitHub PR webhook');
     });
+  } else {
+    logger.info({ phase: 'webhook', event }, 'GitHub event is not pull_request — ignoring');
   }
 
   res.sendStatus(200);
@@ -192,13 +238,24 @@ export function handleGitHubWebhook(req: Request, res: Response): void {
 async function routeGitHubPR(payload: GitHubPRWebhookPayload): Promise<void> {
   const { action, pull_request } = payload;
 
+  logger.info(
+    { phase: 'webhook', action, pr: pull_request.html_url, branch: pull_request.head.ref },
+    'Processing GitHub PR event',
+  );
+
   // Only clean up when PR is closed (merged or not)
-  if (action !== 'closed') return;
+  if (action !== 'closed') {
+    logger.info({ phase: 'webhook', action }, 'PR action is not "closed" — ignoring');
+    return;
+  }
 
   const branch = pull_request.head.ref;
 
   // Only handle branches we created: claude/<cardShortLink>
-  if (!branch.startsWith('claude/')) return;
+  if (!branch.startsWith('claude/')) {
+    logger.info({ phase: 'webhook', branch }, 'PR branch is not a claude/* branch — ignoring');
+    return;
+  }
 
   const cardShortLink = branch.replace('claude/', '');
 
@@ -211,7 +268,7 @@ async function routeGitHubPR(payload: GitHubPRWebhookPayload): Promise<void> {
   await taskQueue.add('cleanup', job);
 
   logger.info(
-    { cardShortLink, pr: pull_request.html_url, reason: job.reason },
-    'Enqueued cleanup for closed PR',
+    { phase: 'webhook', cardShortLink, pr: pull_request.html_url, reason: job.reason },
+    'Enqueued cleanup job for closed PR',
   );
 }

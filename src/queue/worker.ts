@@ -34,12 +34,13 @@ export const worker = new Worker(
 
 async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
   const { cardId, cardShortLink, cardName, cardUrl, boardId } = job.data;
-  const log = logger.child({ cardId, cardName });
+  const log = logger.child({ phase: 'queue', jobId: job.id, cardId, cardShortLink, cardName });
 
-  log.info('Starting new-task job');
+  log.info({ attempt: job.attemptsMade + 1, maxAttempts: job.opts?.attempts ?? 1 }, 'Picked up new-task job');
 
   const branchName = `claude/${cardShortLink}`;
   const repos = getBoardRepos(boardId);
+  log.info({ branchName, repos }, 'Resolved branch and repos for task');
 
   const prompt = buildNewTaskPrompt({
     cardId,
@@ -48,8 +49,12 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
     repos,
     imageDir: '/workspace/.card-images',
   });
+  log.info({ promptLength: prompt.length }, 'Built new-task prompt');
 
   try {
+    log.info('Handing off to container backend — starting worker container');
+    const startTime = Date.now();
+
     const { exitCode, logs } = await runTaskInContainer({
       cardShortLink,
       cardId,
@@ -59,7 +64,14 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
       doneListId: job.data.doneListId,
     });
 
+    const durationMs = Date.now() - startTime;
+    log.info(
+      { exitCode, logBytes: logs.length, durationMs, durationMin: Math.round(durationMs / 60_000) },
+      'Worker container finished',
+    );
+
     if (exitCode !== 0) {
+      log.warn({ exitCode }, 'Worker exited with non-zero code — posting failure comment to Trello');
       const tail = logs.split('\n').slice(-20).join('\n');
       await postTrelloComment(
         cardId,
@@ -68,7 +80,7 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
       throw new Error(`Worker container exited with code ${exitCode}`);
     }
 
-    log.info('New task completed successfully');
+    log.info({ durationMin: Math.round(durationMs / 60_000) }, 'New task completed successfully');
   } catch (err) {
     log.error({ err }, 'new-task job failed');
     throw err;
@@ -77,16 +89,24 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
 
 async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
   const { cardId, cardShortLink, cardUrl, commentText, commenterName, boardId } = job.data;
-  const log = logger.child({ cardId });
+  const log = logger.child({ phase: 'queue', jobId: job.id, cardId, cardShortLink });
 
-  log.info({ commenter: commenterName }, 'Starting feedback job');
+  log.info(
+    { commenter: commenterName, commentLength: commentText.length, attempt: job.attemptsMade + 1 },
+    'Picked up feedback job',
+  );
 
   const branchName = `claude/${cardShortLink}`;
   const repos = getBoardRepos(boardId);
+  log.info({ branchName, repos }, 'Resolved branch and repos for feedback');
 
   const prompt = buildFeedbackPrompt({ cardId, cardUrl, commentText, commenterName, repos });
+  log.info({ promptLength: prompt.length }, 'Built feedback prompt');
 
   try {
+    log.info('Handing off to container backend — starting worker container for feedback');
+    const startTime = Date.now();
+
     const { exitCode, logs } = await runTaskInContainer({
       cardShortLink,
       cardId,
@@ -96,7 +116,14 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
       doneListId: job.data.doneListId,
     });
 
+    const durationMs = Date.now() - startTime;
+    log.info(
+      { exitCode, logBytes: logs.length, durationMs, durationMin: Math.round(durationMs / 60_000) },
+      'Feedback worker container finished',
+    );
+
     if (exitCode !== 0) {
+      log.warn({ exitCode }, 'Feedback worker exited with non-zero code — posting failure comment to Trello');
       const tail = logs.split('\n').slice(-20).join('\n');
       await postTrelloComment(
         cardId,
@@ -105,7 +132,7 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
       throw new Error(`Feedback container exited with code ${exitCode}`);
     }
 
-    log.info('Feedback processed successfully');
+    log.info({ durationMin: Math.round(durationMs / 60_000) }, 'Feedback processed successfully');
   } catch (err) {
     log.error({ err }, 'feedback job failed');
     throw err;
@@ -113,20 +140,23 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
 }
 
 async function handleCleanup(job: Job<CleanupJob>): Promise<void> {
-  const { cardShortLink } = job.data;
-  const log = logger.child({ cardShortLink });
+  const { cardShortLink, prUrl, reason } = job.data;
+  const log = logger.child({ phase: 'cleanup', jobId: job.id, cardShortLink });
 
-  log.info('Cleaning up container and volume for closed/merged PR');
+  log.info({ prUrl, reason }, 'Picked up cleanup job — destroying container and volume');
   await destroyTaskContainer(cardShortLink);
-  log.info('Cleanup complete');
+  log.info({ prUrl, reason }, 'Cleanup complete — container and volume destroyed');
 }
 
 worker.on('completed', (job) => {
-  logger.info({ jobId: job.id, jobName: job.name }, 'Job completed');
+  logger.info({ phase: 'queue', jobId: job.id, jobName: job.name }, 'Job completed');
 });
 
 worker.on('failed', (job, err) => {
-  logger.error({ jobId: job?.id, jobName: job?.name, err }, 'Job failed');
+  logger.error(
+    { phase: 'queue', jobId: job?.id, jobName: job?.name, attempt: job?.attemptsMade, err },
+    'Job failed',
+  );
 });
 
 export async function gracefulShutdown(): Promise<void> {

@@ -49,8 +49,9 @@ export class KubernetesBackend implements ContainerBackend {
     const { cardShortLink, cardId, prompt, doneListId } = opts;
     const jobName = this.jobName(cardShortLink);
     const pvcName = this.pvcName(cardShortLink);
-    const log = logger.child({ job: jobName, namespace: this.namespace });
+    const log = logger.child({ phase: 'container', backend: 'k8s', job: jobName, namespace: this.namespace });
 
+    log.info({ pvcName }, 'Ensuring PVC exists');
     await this.ensurePvc(pvcName, log);
 
     // Remove any existing job with this name (from a previous run)
@@ -63,7 +64,7 @@ export class KubernetesBackend implements ContainerBackend {
       await sleep(2000);
       log.info('Deleted previous job');
     } catch {
-      // No existing job — fine
+      log.info('No previous job to delete');
     }
 
     const job: k8s.V1Job = {
@@ -124,8 +125,19 @@ export class KubernetesBackend implements ContainerBackend {
       },
     };
 
+    log.info(
+      {
+        image: config.containers.workerImage,
+        memoryRequest: '512Mi',
+        memoryLimit: '4Gi',
+        cpuRequest: '500m',
+        pvcName,
+        envVars: ['CLAUDE_PROMPT', 'ANTHROPIC_API_KEY', 'GITHUB_TOKEN', 'TRELLO_API_KEY', 'TRELLO_TOKEN', 'CARD_ID', 'TRELLO_DONE_LIST_ID', 'CI', 'TERM'],
+      },
+      'Creating K8s job',
+    );
     await this.batchApi.createNamespacedJob(this.namespace, job);
-    log.info('Created K8s job');
+    log.info('K8s job created — entering wait loop');
 
     return this.waitForJob(jobName, log);
   }
@@ -160,8 +172,12 @@ export class KubernetesBackend implements ContainerBackend {
     log: typeof logger,
   ): Promise<{ exitCode: number; logs: string }> {
     // Poll until the Job reports Complete or Failed
+    const startTime = Date.now();
+    let pollCount = 0;
+
     while (true) {
       await sleep(5000);
+      pollCount++;
 
       const { body: job } = await this.batchApi.readNamespacedJob(jobName, this.namespace);
       const conditions = job.status?.conditions ?? [];
@@ -169,11 +185,23 @@ export class KubernetesBackend implements ContainerBackend {
       const succeeded = conditions.some((c) => c.type === 'Complete' && c.status === 'True');
       const failed    = conditions.some((c) => c.type === 'Failed'   && c.status === 'True');
 
-      if (!succeeded && !failed) continue;
+      if (!succeeded && !failed) {
+        // Log every 12th poll (~60s) to avoid spam
+        if (pollCount % 12 === 0) {
+          const elapsedMin = Math.round((Date.now() - startTime) / 60_000);
+          log.info({ elapsedMin, pollCount }, 'Still waiting for K8s job to complete');
+        }
+        continue;
+      }
 
-      log.info({ succeeded, failed }, 'Job finished');
+      const durationMs = Date.now() - startTime;
+      log.info(
+        { succeeded, failed, durationMs, durationMin: Math.round(durationMs / 60_000) },
+        'K8s job finished',
+      );
 
       // Find the pod created by this job to get exit code + logs
+      log.info('Looking up pod for log retrieval');
       const { body: podList } = await this.coreApi.listNamespacedPod(
         this.namespace,
         undefined, undefined, undefined, undefined,
@@ -185,13 +213,17 @@ export class KubernetesBackend implements ContainerBackend {
         pod?.status?.containerStatuses?.[0]?.state?.terminated?.exitCode
         ?? (failed ? 1 : 0);
 
+      log.info({ podName: pod?.metadata?.name, exitCode }, 'Found pod');
+
       let logs = '';
       if (pod?.metadata?.name) {
         try {
+          log.info({ podName: pod.metadata.name }, 'Retrieving pod logs');
           const { body } = await this.coreApi.readNamespacedPodLog(
             pod.metadata.name, this.namespace, 'worker',
           );
           logs = body;
+          log.info({ logBytes: logs.length }, 'Retrieved pod logs');
         } catch (err) {
           log.warn({ err }, 'Could not retrieve pod logs');
         }
@@ -204,7 +236,9 @@ export class KubernetesBackend implements ContainerBackend {
   async destroyTask(cardShortLink: string): Promise<void> {
     const jobName = this.jobName(cardShortLink);
     const pvcName = this.pvcName(cardShortLink);
-    const log = logger.child({ job: jobName, namespace: this.namespace });
+    const log = logger.child({ phase: 'cleanup', backend: 'k8s', job: jobName, namespace: this.namespace });
+
+    log.info({ pvcName }, 'Starting K8s job and PVC destruction');
 
     try {
       await this.batchApi.deleteNamespacedJob(
@@ -213,15 +247,17 @@ export class KubernetesBackend implements ContainerBackend {
       );
       log.info('Job deleted');
     } catch {
-      log.warn('Job not found or already deleted');
+      log.info('Job not found or already deleted — skipping');
     }
 
     try {
       await this.coreApi.deleteNamespacedPersistentVolumeClaim(pvcName, this.namespace);
-      log.info('PVC deleted');
+      log.info({ pvcName }, 'PVC deleted');
     } catch {
-      log.warn('PVC not found or already deleted');
+      log.info({ pvcName }, 'PVC not found or already deleted — skipping');
     }
+
+    log.info('K8s destroy complete');
   }
 
   async listWorkers(): Promise<WorkerInfo[]> {

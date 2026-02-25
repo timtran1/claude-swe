@@ -20,10 +20,15 @@ const backend = createBackend();
 // Re-export with original function signatures so queue/worker.ts and index.ts are unchanged.
 
 export function runTaskInContainer(opts: RunTaskOptions): Promise<{ exitCode: number; logs: string }> {
+  logger.info(
+    { phase: 'container', cardShortLink: opts.cardShortLink, isFollowUp: opts.isFollowUp },
+    'Delegating runTask to container backend',
+  );
   return backend.runTask(opts);
 }
 
 export function destroyTaskContainer(cardShortLink: string): Promise<void> {
+  logger.info({ phase: 'cleanup', cardShortLink }, 'Delegating destroyTask to container backend');
   return backend.destroyTask(cardShortLink);
 }
 

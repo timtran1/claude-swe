@@ -62,7 +62,30 @@ Approve and copy the token. Comments and card moves will appear as this bot acco
   curl "https://api.trello.com/1/boards/<BOARD_ID>/lists?key=<KEY>&token=<TOKEN>"
   ```
 
-### 3. Configure
+### 3. Get Anthropic credentials
+
+Go to [console.anthropic.com](https://console.anthropic.com), sign in, and navigate to **API Keys**. Create a new key and copy it — this is your `ANTHROPIC_API_KEY`.
+
+### 4. Get GitHub credentials
+
+**Personal Access Token (PAT)**:
+
+Go to [github.com/settings/tokens](https://github.com/settings/tokens) and choose the token type that matches your setup:
+
+| Situation | Token type | Scopes / permissions |
+|---|---|---|
+| Single user or single org | Fine-grained | **Contents** (read & write), **Pull requests** (read & write) — scope to specific repos |
+| Multiple orgs / all repos | Classic | `repo` |
+
+Copy the token — this is your `GITHUB_TOKEN`.
+
+**Webhook secret**:
+```bash
+openssl rand -hex 32
+```
+Save this value — you'll use it as `GITHUB_WEBHOOK_SECRET` and as the secret when registering the GitHub webhook (see step 6).
+
+### 5. Configure
 
 ```bash
 cp config.example.json config.json
@@ -109,7 +132,7 @@ GITHUB_WEBHOOK_SECRET=
 ANTHROPIC_API_KEY=
 ```
 
-### 4. Build and run
+### 6. Build and run
 
 ```bash
 # Build worker image first (takes a few minutes — installs mise, Claude Code, Playwright, etc.)
@@ -125,13 +148,20 @@ ngrok http 3000
 # Update server.webhookBaseUrl in config.json with the ngrok URL, then restart
 ```
 
-### 5. GitHub webhook (for PR cleanup)
+### 7. GitHub webhook (for PR cleanup)
 
-- Go to your repo → Settings → Webhooks → Add webhook
+When a PR is merged or closed, the orchestrator needs to know so it can destroy the worker container and Docker volume for that task. Without this webhook, containers and volumes accumulate indefinitely.
+
+You can set this up at the repo level or org level — the payload format is identical and the handler works either way. Org-level is simpler if this agent will work across many repos.
+
+**Per-repo**: go to the repo → Settings → Webhooks → Add webhook
+
+**Per-org**: go to your org → Settings → Webhooks → Add webhook (covers all current and future repos in the org)
+
+In both cases:
 - Payload URL: `https://your-server.example.com/webhooks/github`
 - Content type: `application/json`
 - Secret: same value as `GITHUB_WEBHOOK_SECRET` in `.env`
-  - Generate one: `openssl rand -hex 32`
 - Events: select **Pull requests** only
 
 ## Using it
