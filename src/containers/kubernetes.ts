@@ -67,6 +67,8 @@ export class KubernetesBackend implements ContainerBackend {
       log.info('No previous job to delete');
     }
 
+    const isTwoPhase = !!(planPrompt && executePrompt);
+
     const job: k8s.V1Job = {
       apiVersion: 'batch/v1',
       kind: 'Job',
@@ -133,7 +135,6 @@ export class KubernetesBackend implements ContainerBackend {
       },
     };
 
-    const isTwoPhase = !!(planPrompt && executePrompt);
     log.info(
       {
         image: config.containers.workerImage,
