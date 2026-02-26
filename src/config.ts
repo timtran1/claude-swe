@@ -29,6 +29,7 @@ const boardSchema = z.object({
 const configSchema = z.object({
   trello: z.object({
     apiKey: z.string().nullable(),
+    apiSecret: z.string().nullable(),
     token: z.string().nullable(),
     botUsername: z.string().default('claude'),
     boards: z.array(boardSchema).default([]),

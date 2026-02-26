@@ -11,7 +11,7 @@ export interface TrelloCard {
   desc: string;
   idList: string;
   url: string;
-  labels: Array<{ id: string; name: string; color: string }>;
+  labels?: Array<{ id: string; name: string; color: string }>;
 }
 
 export interface TrelloBoard {
@@ -37,7 +37,8 @@ export interface TrelloWebhookAction {
     board?: TrelloBoard;
     list?: TrelloList;
     text?: string; // for commentCard
-    member?: TrelloMember; // for addMemberToCard
+    member?: TrelloMember; // for addMemberToCard (partial: only id + name, no username)
+    idMember?: string; // raw member ID for addMemberToCard
   };
 }
 

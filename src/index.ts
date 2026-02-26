@@ -4,6 +4,7 @@ import { logger } from './logger.js';
 import { handleTrelloWebhook, handleGitHubWebhook } from './webhook/handler.js';
 import { listWorkerContainers } from './containers/manager.js';
 import { worker, gracefulShutdown } from './queue/worker.js';
+import { initBotMemberId } from './trello/bot.js';
 
 const app = express();
 
@@ -89,6 +90,7 @@ process.on('unhandledRejection', (reason) => {
 });
 
 (async () => {
+  await initBotMemberId();
   await ensureTrelloWebhooks();
 
   const server = app.listen(config.server.port, () => {

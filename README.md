@@ -47,7 +47,7 @@ Create a Trello account for Claude (e.g., `claude-bot`) and add it to your board
 
 ### 2. Get Trello credentials
 
-**API key**: go to `https://trello.com/power-ups/admin`, create a Power-Up, copy and save the API key.
+**API key and secret**: go to `https://trello.com/app-key`. The page shows your **API Key** and, after clicking "show", your **Secret**. Save both — the key goes in `TRELLO_API_KEY` and the secret in `TRELLO_API_SECRET`. The secret is used to verify that incoming webhook requests genuinely come from Trello.
 
 **Token**: log in to Trello as the bot account, then visit:
 ```
@@ -55,12 +55,16 @@ https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=t
 ```
 Approve and copy the token. Comments and card moves will appear as this bot account.
 
-**Board and list IDs**:
-- Board ID: open your board in Trello — it's in the URL (`trello.com/b/<BOARD_ID>/...`)
-- List IDs: once you have a key and token:
-  ```bash
-  curl "https://api.trello.com/1/boards/<BOARD_ID>/lists?key=<KEY>&token=<TOKEN>"
-  ```
+**Board ID**: the URL shows the board's short link (`trello.com/b/<SHORT_LINK>/...`), not the full ID. Fetch the real ID using the API:
+```bash
+curl "https://api.trello.com/1/boards/<SHORT_LINK>?key=<KEY>&token=<TOKEN>&fields=id,name"
+```
+Copy the `id` field from the response.
+
+**List IDs**: fetch all lists for the board:
+```bash
+curl "https://api.trello.com/1/boards/<BOARD_ID>/lists?key=<KEY>&token=<TOKEN>"
+```
 
 ### 3. Get Anthropic credentials
 
@@ -98,6 +102,7 @@ Edit `config.json` — non-sensitive settings live here:
 {
   "trello": {
     "apiKey": "env.TRELLO_API_KEY",
+    "apiSecret": "env.TRELLO_API_SECRET",
     "token": "env.TRELLO_TOKEN",
     "botUsername": "claude-bot",
     "boards": [
@@ -126,6 +131,7 @@ Edit `config.json` — non-sensitive settings live here:
 Edit `.env` — secrets only:
 ```
 TRELLO_API_KEY=
+TRELLO_API_SECRET=
 TRELLO_TOKEN=
 GITHUB_TOKEN=
 GITHUB_WEBHOOK_SECRET=
@@ -234,6 +240,7 @@ mcp/
 | Field | Description |
 |---|---|
 | `trello.apiKey` | Trello API key — use `"env.TRELLO_API_KEY"` |
+| `trello.apiSecret` | Trello API secret (from trello.com/app-key) — use `"env.TRELLO_API_SECRET"` |
 | `trello.token` | Trello OAuth token (bot account) — use `"env.TRELLO_TOKEN"` |
 | `trello.botUsername` | Trello username of the bot account |
 | `trello.boards[].id` | Board ID to watch |
@@ -256,6 +263,7 @@ mcp/
 | Variable | Description |
 |---|---|
 | `TRELLO_API_KEY` | Trello API key |
+| `TRELLO_API_SECRET` | Trello API secret — used to verify webhook signatures |
 | `TRELLO_TOKEN` | Trello OAuth token (generated from bot account) |
 | `GITHUB_TOKEN` | GitHub PAT |
 | `GITHUB_WEBHOOK_SECRET` | GitHub webhook secret |

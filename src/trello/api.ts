@@ -40,3 +40,16 @@ export async function moveCardToList(cardId: string, listId: string): Promise<vo
     method: 'PUT',
   });
 }
+
+export interface TrelloCardFull {
+  id: string;
+  shortLink: string;
+  name: string;
+  desc: string;
+  idList: string;
+  url: string;
+}
+
+export async function fetchCard(cardId: string): Promise<TrelloCardFull> {
+  return trelloFetch<TrelloCardFull>(`/cards/${cardId}?fields=id,shortLink,name,desc,idList,url`);
+}

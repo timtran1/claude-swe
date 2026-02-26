@@ -1,8 +1,11 @@
 import crypto from 'crypto';
+import { writeFileSync } from 'fs';
 import type { Request, Response } from 'express';
 import { config, getBoardConfig } from '../config.js';
 import { logger } from '../logger.js';
 import { taskQueue } from '../queue/queue.js';
+import { fetchCard } from '../trello/api.js';
+import { botMemberId } from '../trello/bot.js';
 import type {
   TrelloWebhookPayload,
   GitHubPRWebhookPayload,
@@ -12,17 +15,17 @@ import type {
 } from './types.js';
 
 // --- Trello webhook ---
-// Trello signs requests with HMAC-SHA1 using the OAuth token as the key.
+// Trello signs requests with HMAC-SHA1 using the app's API secret as the key.
 
 function verifyTrelloSignature(rawBody: Buffer, signature: string): boolean {
-  const token = config.trello.token;
-  if (!token) {
-    logger.warn('Trello token not configured — skipping signature verification');
+  const secret = config.trello.apiSecret;
+  if (!secret) {
+    logger.warn('Trello apiSecret not configured — skipping signature verification');
     return true;
   }
   const content = rawBody.toString('utf8') + config.server.webhookBaseUrl + '/webhooks/trello';
   const expected = crypto
-    .createHmac('sha1', token)
+    .createHmac('sha1', secret)
     .update(content)
     .digest('base64');
   const expectedBuf = Buffer.from(expected);
@@ -47,7 +50,15 @@ export function handleTrelloWebhook(req: Request, res: Response): void {
   }
 
   if (!verifyTrelloSignature(rawBody, signature)) {
-    logger.warn({ phase: 'webhook' }, 'Trello webhook signature verification failed');
+    // Temporary debug: dump body + sig to /tmp for manual HMAC testing
+    writeFileSync('/tmp/trello_body.txt', rawBody);
+    writeFileSync('/tmp/trello_sig.txt', signature);
+    const computedContent = rawBody.toString('utf8') + config.server.webhookBaseUrl + '/webhooks/trello';
+    const computedHash = crypto.createHmac('sha1', config.trello.apiSecret!).update(computedContent).digest('base64');
+    logger.warn(
+      { phase: 'webhook', receivedSig: signature, computedHash, callbackUrl: config.server.webhookBaseUrl + '/webhooks/trello', bodyLen: rawBody.length },
+      'Trello webhook signature verification failed',
+    );
     res.sendStatus(401);
     return;
   }
@@ -92,18 +103,30 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
       return;
     }
 
-    if (member?.username !== config.trello.botUsername) {
+    const addedId = data.idMember ?? member?.id;
+    if (!botMemberId || addedId !== botMemberId) {
       logger.info(
-        { phase: 'webhook', cardId: card.id, member: member?.username },
+        { phase: 'webhook', cardId: card.id, addedMemberId: addedId, botMemberId },
         'Member added is not the bot — ignoring',
       );
       return;
     }
 
+    // The addMemberToCard webhook payload omits idList, desc, and url — fetch the full card.
+    let fullCard = card;
+    if (!card.idList) {
+      try {
+        fullCard = await fetchCard(card.id);
+      } catch (err) {
+        logger.warn({ err, phase: 'webhook', cardId: card.id }, 'Failed to fetch full card details — ignoring');
+        return;
+      }
+    }
+
     // If includeLists is configured, only react to cards in those lists
-    if (boardConfig.includeLists.length > 0 && !boardConfig.includeLists.includes(card.idList)) {
+    if (boardConfig.includeLists.length > 0 && !boardConfig.includeLists.includes(fullCard.idList)) {
       logger.info(
-        { phase: 'webhook', cardId: card.id, listId: card.idList },
+        { phase: 'webhook', cardId: card.id, listId: fullCard.idList },
         'Card not in an included list — ignoring',
       );
       return;
@@ -111,10 +134,10 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
 
     const job: NewTaskJob = {
       cardId: card.id,
-      cardShortLink: card.shortLink,
-      cardName: card.name,
-      cardDesc: card.desc,
-      cardUrl: card.url,
+      cardShortLink: fullCard.shortLink,
+      cardName: fullCard.name,
+      cardDesc: fullCard.desc,
+      cardUrl: fullCard.url,
       boardId: board.id,
       doneListId: boardConfig.done?.listId,
     };
