@@ -24,6 +24,10 @@ const boardSchema = z.object({
   id: z.string().min(1).optional(),
   name: z.string().min(1).optional(),
   includeLists: z.array(z.string()).default([]),
+  doing: z.object({
+    listId: z.string().min(1).optional(),
+    list: z.string().min(1).optional(),
+  }).optional(),
   done: z.object({
     listId: z.string().min(1).optional(),
     list: z.string().min(1).optional(),
@@ -121,7 +125,9 @@ export async function resolveNames(): Promise<void> {
     }
 
     const needsListResolution =
-      board.includeLists.some((l) => !isId(l)) || (board.done?.list && !board.done.listId);
+      board.includeLists.some((l) => !isId(l)) ||
+      (board.doing?.list && !board.doing.listId) ||
+      (board.done?.list && !board.done.listId);
 
     if (!needsListResolution) continue;
 
@@ -141,6 +147,15 @@ export async function resolveNames(): Promise<void> {
       }
       return match.id;
     });
+
+    // Resolve doing.list name → doing.listId
+    if (board.doing?.list && !board.doing.listId) {
+      const match = lists.find((l) => l.name === board.doing!.list);
+      if (!match) {
+        throw new Error(`Doing list not found by name "${board.doing.list}" on board "${board.name ?? board.id}"`);
+      }
+      board.doing.listId = match.id;
+    }
 
     // Resolve done.list name → done.listId
     if (board.done?.list && !board.done.listId) {

@@ -139,6 +139,7 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
       cardDesc: fullCard.desc,
       cardUrl: fullCard.url,
       boardId: board.id,
+      doingListId: boardConfig.doing?.listId,
       doneListId: boardConfig.done?.listId,
     };
 
@@ -194,6 +195,7 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
       boardId: board.id,
       commentText,
       commenterName: memberCreator.fullName,
+      doingListId: boardConfig.doing?.listId,
       doneListId: boardConfig.done?.listId,
     };
 

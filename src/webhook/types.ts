@@ -55,6 +55,7 @@ export interface NewTaskJob {
   cardDesc: string;
   cardUrl: string;
   boardId: string;
+  doingListId?: string;
   doneListId?: string;
 }
 
@@ -66,6 +67,7 @@ export interface FeedbackJob {
   boardId: string;
   commentText: string;
   commenterName: string;
+  doingListId?: string;
   doneListId?: string;
 }
 

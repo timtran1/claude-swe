@@ -4,7 +4,7 @@ import { logger } from '../logger.js';
 import { runTaskInContainer, destroyTaskContainer } from '../containers/manager.js';
 import { buildPlanPrompt, buildExecutePrompt, buildFeedbackPrompt } from '../agent/prompt.js';
 import { getBoardRepos } from '../workspace/repo.js';
-import { postTrelloComment } from '../trello/api.js';
+import { postTrelloComment, moveCardToList } from '../trello/api.js';
 import type { NewTaskJob, FeedbackJob, CleanupJob } from '../webhook/types.js';
 
 const connection = {
@@ -46,6 +46,13 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
   const planPrompt = buildPlanPrompt(promptOpts);
   const executePrompt = buildExecutePrompt(promptOpts);
   log.info({ planPromptLength: planPrompt.length, executePromptLength: executePrompt.length }, 'Built two-phase prompts');
+
+  if (job.data.doingListId) {
+    await moveCardToList(cardId, job.data.doingListId).catch((err) =>
+      log.warn({ err }, 'Failed to move card to Doing list — continuing'),
+    );
+    log.info({ doingListId: job.data.doingListId }, 'Moved card to Doing list');
+  }
 
   try {
     log.info('Handing off to container backend — starting worker container (Opus plan → Sonnet execute)');
@@ -99,6 +106,13 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
 
   const prompt = buildFeedbackPrompt({ cardId, cardUrl, commentText, commenterName, repos });
   log.info({ promptLength: prompt.length }, 'Built feedback prompt');
+
+  if (job.data.doingListId) {
+    await moveCardToList(cardId, job.data.doingListId).catch((err) =>
+      log.warn({ err }, 'Failed to move card to Doing list — continuing'),
+    );
+    log.info({ doingListId: job.data.doingListId }, 'Moved card to Doing list');
+  }
 
   try {
     log.info('Handing off to container backend — starting worker container for feedback');

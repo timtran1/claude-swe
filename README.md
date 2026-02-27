@@ -55,17 +55,6 @@ https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=t
 ```
 Approve and copy the token. Comments and card moves will appear as this bot account.
 
-**Board ID**: the URL shows the board's short link (`trello.com/b/<SHORT_LINK>/...`), not the full ID. Fetch the real ID using the API:
-```bash
-curl "https://api.trello.com/1/boards/<SHORT_LINK>?key=<KEY>&token=<TOKEN>&fields=id,name"
-```
-Copy the `id` field from the response.
-
-**List IDs**: fetch all lists for the board:
-```bash
-curl "https://api.trello.com/1/boards/<BOARD_ID>/lists?key=<KEY>&token=<TOKEN>"
-```
-
 ### 3. Get Anthropic credentials
 
 Go to [console.anthropic.com](https://console.anthropic.com), sign in, and navigate to **API Keys**. Create a new key and copy it — this is your `ANTHROPIC_API_KEY`.
@@ -107,9 +96,10 @@ Edit `config.json` — non-sensitive settings live here:
     "botUsername": "claude-bot",
     "boards": [
       {
-        "id": "YOUR_BOARD_ID",
-        "includeLists": ["LIST_ID_TODO", "LIST_ID_IN_PROGRESS"],
-        "done": { "listId": "LIST_ID_DONE" }
+        "name": "My Project Board",
+        "includeLists": ["To Do", "In Progress"],
+        "doing": { "list": "In Progress" },
+        "done": { "list": "Done" }
       }
     ]
   },
@@ -124,8 +114,10 @@ Edit `config.json` — non-sensitive settings live here:
 }
 ```
 
+- **Board and list names**: use human-readable names by default. IDs are also supported if needed (`id`, `listId` instead of `name`, `list`).
 - **`includeLists`**: only cards in these lists trigger a task when the bot is assigned. Empty array = react to all lists.
-- **`done`**: optional — if set, Claude moves the card to this list when the PR is opened. Omit to skip card movement.
+- **`doing`**: optional — if set, the orchestrator moves the card to this list when starting work. Omit to skip.
+- **`done`**: optional — if set, this list ID is passed to Claude via the Trello MCP server so it can move the card when appropriate (typically after opening a PR). Omit to skip.
 - **`env.KEY`**: any value starting with `env.` is resolved from the environment variable of that name at startup. Missing vars resolve to `null` (graceful degradation, logged on `/health`).
 
 Edit `.env` — secrets only:
@@ -243,9 +235,10 @@ mcp/
 | `trello.apiSecret` | Trello API secret (from trello.com/app-key) — use `"env.TRELLO_API_SECRET"` |
 | `trello.token` | Trello OAuth token (bot account) — use `"env.TRELLO_TOKEN"` |
 | `trello.botUsername` | Trello username of the bot account |
-| `trello.boards[].id` | Board ID to watch |
-| `trello.boards[].includeLists` | List IDs that trigger tasks (empty = all lists) |
-| `trello.boards[].done.listId` | List ID to move cards to on completion (omit to skip) |
+| `trello.boards[].name` | Board name to watch (or use `id` for board ID) |
+| `trello.boards[].includeLists` | List names that trigger tasks (or use list IDs; empty = all lists) |
+| `trello.boards[].doing.list` | List name to move cards to when starting work (or use `listId`; omit to skip) |
+| `trello.boards[].done.list` | List name to move cards to when PR is opened (or use `listId`; omit to skip) |
 | `github.token` | GitHub PAT (repo + PR permissions) — use `"env.GITHUB_TOKEN"` |
 | `github.webhookSecret` | GitHub webhook secret — use `"env.GITHUB_WEBHOOK_SECRET"` |
 | `anthropic.apiKey` | Anthropic API key — use `"env.ANTHROPIC_API_KEY"` |
