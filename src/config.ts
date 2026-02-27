@@ -61,6 +61,7 @@ const configSchema = z.object({
   containers: z.object({
     backend: z.enum(['docker', 'kubernetes']).default('docker'),
     workerImage: z.string().default('claude-swe-worker:latest'),
+    concurrency: z.number().int().positive().default(10),
     kubernetes: z.object({
       namespace: z.string().default('default'),
       storageClass: z.string().default(''),
@@ -104,7 +105,7 @@ export async function resolveNames(): Promise<void> {
   const boards = config.trello.boards;
   if (boards.length === 0) return;
 
-  const hasAnyName = boards.some((b) => !b.id || b.includeLists.some((l) => !isId(l)) || b.done?.list);
+  const hasAnyName = boards.some((b) => !b.id || b.includeLists.some((l) => !isId(l)) || b.doing?.list || b.done?.list);
   if (!hasAnyName) return;
 
   let allBoards: { id: string; name: string }[];

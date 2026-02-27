@@ -37,7 +37,7 @@ export const worker = new Worker(
         logger.warn({ jobName: job.name }, 'Unknown job type — skipping');
     }
   },
-  { connection, concurrency: 2 },
+  { connection, concurrency: config.containers.concurrency },
 );
 
 async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
