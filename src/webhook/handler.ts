@@ -175,10 +175,12 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
       return;
     }
 
-    // If includeLists is configured, only react to cards in those lists
-    if (boardConfig.includeLists.length > 0 && !boardConfig.includeLists.includes(card.idList)) {
+    // If includeLists is configured, only react to cards in those lists.
+    // The commentCard webhook card stub omits idList; use data.list.id instead.
+    const listId = data.list?.id ?? card.idList;
+    if (boardConfig.includeLists.length > 0 && !boardConfig.includeLists.includes(listId)) {
       logger.info(
-        { phase: 'webhook', cardId: card.id, listId: card.idList },
+        { phase: 'webhook', cardId: card.id, listId },
         'Card not in an included list — ignoring comment',
       );
       return;
