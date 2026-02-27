@@ -1,5 +1,6 @@
 interface NewTaskPromptOptions {
   cardId: string;
+  cardShortLink: string;
   cardName: string;
   cardUrl: string;
   repos: string[];
@@ -38,7 +39,7 @@ function repoToSlug(url: string): string {
 }
 
 export function buildPlanPrompt(opts: NewTaskPromptOptions): string {
-  const { cardId, cardName, cardUrl, repos, imageDir } = opts;
+  const { cardId, cardShortLink, cardName, cardUrl, repos, imageDir } = opts;
 
   const imageSection = imageDir
     ? `
@@ -70,7 +71,7 @@ ${buildRepoSection(repos)}
 
 1. Read the Trello card fully using the trello MCP \`get_card\` tool
 2. Clone the repo(s) into /workspace as described above
-3. In each repo you will modify, create a new branch: \`git checkout -b claude/${cardId.slice(-6)}\`
+3. In each repo you will modify, create a new branch: \`git checkout -b claude/${cardShortLink}\`
 4. Run \`mise install\` if a runtime config file exists, then install project dependencies:
    | File present | Command |
    |---|---|
@@ -111,7 +112,7 @@ ${buildRepoSection(repos)}
 }
 
 export function buildExecutePrompt(opts: NewTaskPromptOptions): string {
-  const { cardId, cardUrl, imageDir } = opts;
+  const { cardId, cardShortLink, cardUrl, imageDir } = opts;
 
   const imageSection = imageDir
     ? `
@@ -136,7 +137,7 @@ Card ID: ${cardId}
 
 The workspace is already prepared:
 - The repo(s) have been cloned into /workspace (each in its own subdirectory)
-- The branch \`claude/${cardId.slice(-6)}\` has been created and checked out in each repo that requires changes
+- The branch \`claude/${cardShortLink}\` has been created and checked out in each repo that requires changes
 - Runtime and dependencies have been installed
 - A detailed implementation plan is at /workspace/.plan.md
 ${imageSection}
@@ -163,7 +164,7 @@ ${imageSection}
 }
 
 export function buildNewTaskPrompt(opts: NewTaskPromptOptions): string {
-  const { cardId, cardName, cardUrl, repos, imageDir } = opts;
+  const { cardId, cardShortLink, cardName, cardUrl, repos, imageDir } = opts;
 
   const imageSection = imageDir
     ? `
@@ -207,7 +208,7 @@ ${buildRepoSection(repos)}
 
 1. Read the Trello card fully using the trello MCP \`get_card\` tool
 2. Clone the repo(s) into /workspace as described above
-3. In each repo you will modify, create a new branch: \`git checkout -b claude/${cardId.slice(-6)}\`
+3. In each repo you will modify, create a new branch: \`git checkout -b claude/${cardShortLink}\`
 4. In each repo, read \`CLAUDE.md\` in the root if it exists, then explore the codebase to understand its structure and conventions
 5. Set up the runtime and install dependencies:
    - If a \`.mise.toml\`, \`.tool-versions\`, \`.nvmrc\`, or \`.python-version\` file exists,

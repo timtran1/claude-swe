@@ -50,7 +50,7 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
   const repos = getBoardRepos(boardId);
   log.info({ branchName, repos }, 'Resolved branch and repos for task');
 
-  const promptOpts = { cardId, cardName, cardUrl, repos, imageDir: '/workspace/.card-images' };
+  const promptOpts = { cardId, cardShortLink, cardName, cardUrl, repos, imageDir: '/workspace/.card-images' };
   const planPrompt = buildPlanPrompt(promptOpts);
   const executePrompt = buildExecutePrompt(promptOpts);
   log.info({ planPromptLength: planPrompt.length, executePromptLength: executePrompt.length }, 'Built two-phase prompts');
