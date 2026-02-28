@@ -67,8 +67,10 @@ Go to [github.com/settings/tokens](https://github.com/settings/tokens) and choos
 
 | Situation | Token type | Scopes / permissions |
 |---|---|---|
-| Single user or single org | Fine-grained | **Contents** (read & write), **Pull requests** (read & write) — scope to specific repos |
-| Multiple orgs / all repos | Classic | `repo` |
+| Single user or single org | Fine-grained | **Contents** (read & write), **Pull requests** (read & write), **Workflows** (read & write) — scope to specific repos |
+| Multiple orgs / all repos | Classic | `repo`, `workflow` |
+
+> **Note:** The `workflow` scope (classic) / Workflows permission (fine-grained) is required to push changes to `.github/workflows/` files. Without it, GitHub will reject any push that touches workflow files.
 
 Copy the token — this is your `GITHUB_TOKEN`.
 
@@ -239,7 +241,7 @@ mcp/
 | `trello.boards[].includeLists` | List names that trigger tasks (or use list IDs; empty = all lists) |
 | `trello.boards[].doing.list` | List name to move cards to when starting work (or use `listId`; omit to skip) |
 | `trello.boards[].done.list` | List name to move cards to when PR is opened (or use `listId`; omit to skip) |
-| `github.token` | GitHub PAT (repo + PR permissions) — use `"env.GITHUB_TOKEN"` |
+| `github.token` | GitHub PAT (`repo` + `workflow` scopes, or fine-grained with Contents/PRs/Workflows write) — use `"env.GITHUB_TOKEN"` |
 | `github.webhookSecret` | GitHub webhook secret — use `"env.GITHUB_WEBHOOK_SECRET"` |
 | `anthropic.apiKey` | Anthropic API key — use `"env.ANTHROPIC_API_KEY"` |
 | `server.port` | HTTP server port (default: `3000`) |

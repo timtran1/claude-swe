@@ -261,7 +261,7 @@ interface FeedbackPromptOptions {
 }
 
 export function buildFeedbackPrompt(opts: FeedbackPromptOptions): string {
-  const { cardUrl, commentText, commenterName } = opts;
+  const { cardId, cardUrl, commentText, commenterName } = opts;
 
   return `
 You are an autonomous software engineer handling review feedback on a pull request.
@@ -269,6 +269,7 @@ You are an autonomous software engineer handling review feedback on a pull reque
 ## Feedback Received
 
 Trello card: ${cardUrl}
+Card ID: ${cardId}
 Reviewer: ${commenterName}
 Latest comment: "${commentText}"
 
@@ -288,13 +289,14 @@ Latest comment: "${commentText}"
    b. Start the dev server and use the Playwright MCP server to take screenshots
    c. Verify the updated UI looks correct before committing
 9. Commit and push your changes to the existing PR branch(es)
-10. Post a reply on the Trello card using the trello MCP \`add_comment\` tool summarizing
-   what you changed in response to the feedback
+10. Post a reply on the Trello card using the trello MCP \`add_comment\` tool (card ID: ${cardId})
+    summarizing what you changed in response to the feedback
 
 ## Important Rules
 
 - Only make changes directly related to the feedback
 - Do not open a new PR — push to the existing branch
+- Post your summary comment on the Trello card only — do NOT comment on the GitHub PR
 - Keep the response comment concise and factual
 `.trim();
 }
