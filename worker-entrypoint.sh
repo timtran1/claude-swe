@@ -12,6 +12,30 @@ eval "$(/root/.local/bin/mise activate bash)" 2>/dev/null || true
 if [ -f /workspace/.feedback-prompt ]; then
   PROMPT="$(cat /workspace/.feedback-prompt)"
   rm /workspace/.feedback-prompt
+
+  # Always write fresh MCP settings (don't rely on PVC state from a prior run)
+  mkdir -p /workspace/.claude
+  cat > /workspace/.claude/settings.local.json <<MCPEOF
+{
+  "mcpServers": {
+    "trello": {
+      "command": "node",
+      "args": ["/opt/mcp/trello-server/dist/index.js"],
+      "env": {
+        "TRELLO_API_KEY": "${TRELLO_API_KEY}",
+        "TRELLO_TOKEN": "${TRELLO_TOKEN}",
+        "TRELLO_DONE_LIST_ID": "${TRELLO_DONE_LIST_ID:-}"
+      }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest", "--headless"]
+    }
+  }
+}
+MCPEOF
+  chown -R worker:worker /workspace
+
   cd /workspace
   exec gosu worker stdbuf -oL claude \
     --print \

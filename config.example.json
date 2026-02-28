@@ -1,0 +1,45 @@
+{
+  "trello": {
+    "apiKey": "env.TRELLO_API_KEY",
+    "apiSecret": "env.TRELLO_API_SECRET",
+    "token": "env.TRELLO_TOKEN",
+    "botUsername": "claude249",
+    "boards": [
+      {
+        "name": "Claude SWE",
+        "includeLists": ["Todo", "Doing", "Done", "Testing"],
+        "doing": {
+          "list": "Doing"
+        },
+        "done": {
+          "list": "Done"
+        },
+        "repos": ["https://github.com/DeepselSystems/claude-swe"]
+      }
+    ]
+  },
+  "github": {
+    "token": "env.GITHUB_TOKEN",
+    "webhookSecret": "env.GITHUB_WEBHOOK_SECRET"
+  },
+  "anthropic": {
+    "apiKey": "env.ANTHROPIC_API_KEY"
+  },
+  "server": {
+    "port": 3000,
+    "webhookBaseUrl": "https://claude-swe-dev.deepsel.com"
+  },
+  "redis": {
+    "host": "redis.redis.svc.cluster.local",
+    "port": 6379
+  },
+  "containers": {
+    "backend": "kubernetes",
+    "workerImage": "ghcr.io/deepselsystems/claude-swe-worker:latest",
+    "concurrency": 10,
+    "kubernetes": {
+      "namespace": "claude-swe",
+      "storageClass": "local-storage"
+    }
+  }
+}
