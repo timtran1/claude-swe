@@ -38,7 +38,7 @@ function repoToSlug(url: string): string {
   return url.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
 }
 
-export function buildPlanPrompt(opts: NewTaskPromptOptions): string {
+export function buildPlanPrompt(opts: NewTaskPromptOptions, additionalPrompt?: string): string {
   const { cardId, cardShortLink, cardName, cardUrl, repos, imageDir } = opts;
 
   const imageSection = imageDir
@@ -99,7 +99,7 @@ ${buildRepoSection(repos)}
    - **Files to Modify**: For each file, list the specific changes needed
    - **Files to Create**: For each new file, describe its purpose and content
    - **Test Strategy**: Which tests to run, what new tests to write
-   - **Visual Verification**: If this is a frontend task, describe what pages/components to screenshot and what they should look like
+   - **Visual Verification**: If this involves any UI or frontend changes, specify exactly which pages/components to open in the browser, what interactions to perform, and what the result should look like. Skip this section only for pure backend tasks with no UI impact.
    - **Done Criteria**: Exact conditions that must be true for the task to be complete
 
 ## Critical Rules
@@ -108,22 +108,18 @@ ${buildRepoSection(repos)}
 - Do NOT open PRs, move the Trello card, or post comments
 - The plan must be specific enough that another agent can implement it without reading the card again
 - If anything in the card is ambiguous, document your interpretation in the plan
-`.trim();
+${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
 }
 
-export function buildExecutePrompt(opts: NewTaskPromptOptions): string {
+export function buildExecutePrompt(opts: NewTaskPromptOptions, additionalPrompt?: string): string {
   const { cardId, cardShortLink, cardUrl, imageDir } = opts;
 
   const imageSection = imageDir
     ? `
 ## Visual References
 
-If this task involves frontend or UI changes, reference images are in ${imageDir}/.
-After implementing, use the Playwright MCP server to verify your work:
-1. Start the dev server (e.g. \`npm run dev\`)
-2. Navigate to the relevant pages and take screenshots
-3. Compare against the reference images — iterate until they match
-4. Paste a final screenshot into the PR description as evidence
+Reference images from the Trello card are in ${imageDir}/. Study them before implementing
+any UI changes — they are the visual specification.
 `
     : '';
 
@@ -146,11 +142,16 @@ ${imageSection}
 1. Read /workspace/.plan.md — this is your specification, follow it precisely
 2. Implement every change described in the plan
 3. Run the test suite as specified in the plan — fix any failures before proceeding
-4. If this is a frontend task, perform visual verification as described in the plan
+4. If this task involves any UI or frontend changes, do browser verification:
+   a. Start the dev server (e.g. \`npm run dev\`)
+   b. Use the Playwright MCP server to navigate to the relevant pages
+   c. Take screenshots and verify the result looks correct
+   d. If reference images exist in ${imageDir || '/workspace/.card-images'}/, compare against them and iterate until they match
+   e. Do NOT commit until the UI looks right — paste a final screenshot into the PR body as evidence
+   Skip this step only if the task is purely backend with zero UI impact.
 5. Commit all changes with a clear, descriptive message (do this in each repo that has changes)
 6. For each repo with changes, push the branch and open a PR using the gh CLI:
    \`gh pr create --title "<task name>" --body "<summary of changes>"\`
-   If this was a frontend task, paste a final Playwright screenshot into the PR body
 7. Move the Trello card to the Done list using the trello MCP \`move_card\` tool
 8. Post all PR URLs as a comment on the Trello card using the trello MCP \`add_comment\` tool
 
@@ -160,10 +161,10 @@ ${imageSection}
 - Do NOT move the card to Done until all tests pass
 - Do NOT open a PR if there are failing tests
 - Write clean, idiomatic code that matches the existing codebase style
-`.trim();
+${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
 }
 
-export function buildNewTaskPrompt(opts: NewTaskPromptOptions): string {
+export function buildNewTaskPrompt(opts: NewTaskPromptOptions, additionalPrompt?: string): string {
   const { cardId, cardShortLink, cardName, cardUrl, repos, imageDir } = opts;
 
   const imageSection = imageDir
@@ -171,20 +172,7 @@ export function buildNewTaskPrompt(opts: NewTaskPromptOptions): string {
 ## Visual References
 
 Screenshots and mockups from the Trello card have been saved to ${imageDir}/.
-Check this directory after reading the card — if it contains images, they are the
-visual specification for this task. Study them carefully before writing any code.
-
-## Visual Verification
-
-If this task involves any frontend or UI changes:
-1. Read the images in ${imageDir}/ to understand exactly what the result should look like
-2. After implementing, use the Playwright MCP server to verify your work visually:
-   a. Start the dev server (e.g. \`npm run dev\`)
-   b. Use Playwright to navigate to the relevant pages
-   c. Take screenshots and compare them against the reference images in ${imageDir}/
-   d. Fix, screenshot, compare — iterate until your implementation matches the designs
-3. Do not commit until the UI visually matches the references
-4. Paste a final screenshot into the PR description as evidence
+Study them carefully before writing any code — they are the visual specification for this task.
 `
     : '';
 
@@ -230,18 +218,21 @@ ${buildRepoSection(repos)}
    - If installation fails, read the error and fix it (missing system dep, wrong node version, etc.)
 6. Implement the solution described in the card
 7. Run the project's test suite and fix any failures before proceeding
-8. If this is a frontend task:
-   a. Check /workspace/.card-images/ — if reference images are present, study them first
-   b. Start the dev server (e.g. \`npm run dev\`)
-   c. Use the Playwright MCP server to navigate to the relevant pages and take screenshots
-   d. Compare your screenshots against the reference images — iterate until they match
-   e. Do not move forward until the UI visually matches the designs
+8. If this task involves any UI or frontend changes, do browser verification:
+   a. Start the dev server (e.g. \`npm run dev\`)
+   b. Use the Playwright MCP server to navigate to the relevant pages
+   c. Take screenshots and verify the result looks correct
+   d. If reference images exist in ${imageDir || '/workspace/.card-images'}/, compare against them and iterate until they match
+   e. Fix, screenshot, compare — keep iterating until the UI is correct
+   f. Do NOT move forward until the UI visually matches the expected result
+   Skip this step only if the task is purely backend with zero UI impact.
 9. Commit all changes with a clear, descriptive message (do this in each repo that has changes)
 10. For each repo with changes, push the branch and open a PR using the gh CLI:
    \`gh pr create --title "<task name>" --body "<summary of changes>"\`
-   If this was a frontend task, paste a final Playwright screenshot into the PR body
+   If this involved UI changes, paste a final Playwright screenshot into the PR body as evidence
 11. Move the Trello card to the Done list using the trello MCP \`move_card\` tool
 12. Post all PR URLs as a comment on the Trello card using the trello MCP \`add_comment\` tool
+   If this involved UI changes, include the final Playwright screenshot inline in the comment body
 
 ## Important Rules
 
@@ -249,7 +240,7 @@ ${buildRepoSection(repos)}
 - Do NOT open a PR if there are failing tests
 - Write clean, idiomatic code that matches the existing codebase style
 - If anything is unclear, make a reasonable implementation choice and document it
-`.trim();
+${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
 }
 
 interface FeedbackPromptOptions {
@@ -261,7 +252,7 @@ interface FeedbackPromptOptions {
   doneListId?: string;
 }
 
-export function buildFeedbackPrompt(opts: FeedbackPromptOptions): string {
+export function buildFeedbackPrompt(opts: FeedbackPromptOptions, additionalPrompt?: string): string {
   const { cardId, cardUrl, commentText, commenterName, doneListId } = opts;
 
   return `
@@ -285,10 +276,12 @@ Latest comment: "${commentText}"
 5. Run \`mise install\` if a runtime config file exists, then install project dependencies
 6. Implement the requested changes
 7. Run the test suite and ensure all tests pass
-8. If the feedback relates to UI or visual appearance:
-   a. Check /workspace/.card-images/ for any reference screenshots on the card
-   b. Start the dev server and use the Playwright MCP server to take screenshots
-   c. Verify the updated UI looks correct before committing
+8. If this task involves any UI or frontend changes, do browser verification:
+   a. Start the dev server and use the Playwright MCP server to navigate to the relevant pages
+   b. Take screenshots and verify the updated UI looks correct
+   c. Check /workspace/.card-images/ for any reference images and compare against them
+   d. Iterate until the UI is correct — do NOT commit until it looks right
+   Skip this step only if the changes are purely backend with zero UI impact.
 9. Commit and push your changes to the existing PR branch(es)
 10. Post a reply on the Trello card using the trello MCP \`add_comment\` tool (card ID: ${cardId})
     summarizing what you changed in response to the feedback
@@ -300,5 +293,5 @@ ${doneListId ? `11. Move the Trello card back to Done using the trello MCP \`mov
 - Do not open a new PR — push to the existing branch
 - Post your summary comment on the Trello card only — do NOT comment on the GitHub PR
 - Keep the response comment concise and factual
-`.trim();
+${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
 }

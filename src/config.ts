@@ -35,7 +35,22 @@ const boardSchema = z.object({
   repos: z.array(z.string().url()).default([]),
 }).refine((b) => b.id || b.name, { message: 'Board must have either id or name' });
 
+const agentSchema = z.object({
+  planMode: z.boolean().default(true),
+  models: z.object({
+    plan: z.string().default('opus'),
+    execute: z.string().default('sonnet'),
+  }).default({}),
+  prompts: z.object({
+    plan: z.string().optional(),
+    execute: z.string().optional(),
+    newTask: z.string().optional(),
+    feedback: z.string().optional(),
+  }).default({}),
+}).default({});
+
 const configSchema = z.object({
+  agent: agentSchema,
   trello: z.object({
     apiKey: z.string().nullable(),
     apiSecret: z.string().nullable(),

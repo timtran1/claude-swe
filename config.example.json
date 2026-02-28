@@ -1,4 +1,17 @@
 {
+  "agent": {
+    "planMode": true,
+    "models": {
+      "plan": "opus",
+      "execute": "sonnet"
+    },
+    "prompts": {
+      "plan": "Additional instructions for planning mode",
+      "execute": "Additional instructions for execute mode",
+      "newTask": "Additional instructions for new tasks",
+      "feedback": "Additional instructions for iterating on existing tasks"
+    }
+  },
   "trello": {
     "apiKey": "env.TRELLO_API_KEY",
     "apiSecret": "env.TRELLO_API_SECRET",

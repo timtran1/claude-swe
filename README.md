@@ -91,6 +91,16 @@ Edit `config.json` — non-sensitive settings live here:
 
 ```json
 {
+  "agent": {
+    "planMode": true,
+    "models": { "plan": "opus", "execute": "sonnet" },
+    "prompts": {
+      "plan": "",
+      "execute": "",
+      "newTask": "",
+      "feedback": ""
+    }
+  },
   "trello": {
     "apiKey": "env.TRELLO_API_KEY",
     "apiSecret": "env.TRELLO_API_SECRET",
@@ -107,7 +117,7 @@ Edit `config.json` — non-sensitive settings live here:
   },
   "github": {
     "token": "env.GITHUB_TOKEN",
-    "webhookSecret": "env.GITHUB_WEBHOOK_SECRET",
+    "webhookSecret": "env.GITHUB_WEBHOOK_SECRET"
   },
   "anthropic": { "apiKey": "env.ANTHROPIC_API_KEY" },
   "server": { "port": 3000, "webhookBaseUrl": "https://your-server.example.com" },
@@ -233,6 +243,13 @@ mcp/
 
 | Field | Description |
 |---|---|
+| `agent.planMode` | `true` (default): two-phase Opus plan → Sonnet execute. `false`: single-phase with the execute model only |
+| `agent.models.plan` | Model used for the planning phase (default: `"opus"`) |
+| `agent.models.execute` | Model used for execution, feedback, and single-phase tasks (default: `"sonnet"`) |
+| `agent.prompts.plan` | Extra instructions appended to the planning prompt (optional) |
+| `agent.prompts.execute` | Extra instructions appended to the execution prompt (optional) |
+| `agent.prompts.newTask` | Extra instructions appended to the single-phase new-task prompt (optional, used when `planMode` is `false`) |
+| `agent.prompts.feedback` | Extra instructions appended to the feedback prompt (optional) |
 | `trello.apiKey` | Trello API key — use `"env.TRELLO_API_KEY"` |
 | `trello.apiSecret` | Trello API secret (from trello.com/app-key) — use `"env.TRELLO_API_SECRET"` |
 | `trello.token` | Trello OAuth token (bot account) — use `"env.TRELLO_TOKEN"` |

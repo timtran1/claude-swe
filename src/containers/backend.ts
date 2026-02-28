@@ -9,6 +9,10 @@ export interface RunTaskOptions {
   planPrompt?: string;
   /** Two-phase new-task: execution prompt for Sonnet */
   executePrompt?: string;
+  /** Model to use for the planning phase */
+  planModel?: string;
+  /** Model to use for the execution (and single-phase) phase */
+  executeModel?: string;
   /** If true, re-use existing workspace (for feedback on existing PR) */
   isFollowUp: boolean;
   /** Done list ID to pass to the worker container, if card should be moved on completion */

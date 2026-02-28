@@ -40,7 +40,7 @@ MCPEOF
   exec gosu worker stdbuf -oL claude \
     --print \
     --verbose \
-    --model sonnet \
+    --model "${CLAUDE_EXECUTE_MODEL:-sonnet}" \
     --dangerously-skip-permissions \
     "$PROMPT"
 fi
@@ -90,11 +90,11 @@ cd /workspace
 
 if [ -n "${CLAUDE_PLAN_PROMPT:-}" ]; then
   # Two-phase: Opus plans, Sonnet executes (new tasks)
-  echo "=== Phase 1: Planning with Opus ==="
+  echo "=== Phase 1: Planning with ${CLAUDE_PLAN_MODEL:-opus} ==="
   gosu worker stdbuf -oL claude \
     --print \
     --verbose \
-    --model opus \
+    --model "${CLAUDE_PLAN_MODEL:-opus}" \
     --dangerously-skip-permissions \
     "${CLAUDE_PLAN_PROMPT}"
 
@@ -103,19 +103,19 @@ if [ -n "${CLAUDE_PLAN_PROMPT:-}" ]; then
     exit 1
   fi
 
-  echo "=== Phase 2: Executing with Sonnet ==="
+  echo "=== Phase 2: Executing with ${CLAUDE_EXECUTE_MODEL:-sonnet} ==="
   exec gosu worker stdbuf -oL claude \
     --print \
     --verbose \
-    --model sonnet \
+    --model "${CLAUDE_EXECUTE_MODEL:-sonnet}" \
     --dangerously-skip-permissions \
     "${CLAUDE_EXECUTE_PROMPT}"
 else
-  # Single-phase: Sonnet only (feedback jobs)
+  # Single-phase: execute model only (feedback jobs or planMode=false)
   exec gosu worker stdbuf -oL claude \
     --print \
     --verbose \
-    --model sonnet \
+    --model "${CLAUDE_EXECUTE_MODEL:-sonnet}" \
     --dangerously-skip-permissions \
     "${CLAUDE_PROMPT}"
 fi

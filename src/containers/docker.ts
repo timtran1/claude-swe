@@ -58,7 +58,7 @@ export class DockerBackend implements ContainerBackend {
   }
 
   async runTask(opts: RunTaskOptions): Promise<{ exitCode: number; logs: string }> {
-    const { cardShortLink, cardId, prompt, planPrompt, executePrompt, doneListId, isFollowUp } = opts;
+    const { cardShortLink, cardId, prompt, planPrompt, executePrompt, planModel, executeModel, doneListId, isFollowUp } = opts;
     const name = this.containerName(cardShortLink);
     const vol = this.volumeName(cardShortLink);
     const log = logger.child({ phase: 'container', backend: 'docker', container: name });
@@ -157,6 +157,8 @@ export class DockerBackend implements ContainerBackend {
         `TRELLO_TOKEN=${config.trello.token ?? ''}`,
         `CARD_ID=${cardId}`,
         `TRELLO_DONE_LIST_ID=${doneListId ?? ''}`,
+        `CLAUDE_PLAN_MODEL=${planModel ?? 'opus'}`,
+        `CLAUDE_EXECUTE_MODEL=${executeModel ?? 'sonnet'}`,
         'CI=1',
         'TERM=dumb',
       ],

@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import { taskQueue } from './queue.js';
 import { logger } from '../logger.js';
 import { runTaskInContainer, destroyTaskContainer } from '../containers/manager.js';
-import { buildPlanPrompt, buildExecutePrompt, buildFeedbackPrompt } from '../agent/prompt.js';
+import { buildPlanPrompt, buildExecutePrompt, buildNewTaskPrompt, buildFeedbackPrompt } from '../agent/prompt.js';
 import { getBoardRepos } from '../workspace/repo.js';
 import { postTrelloComment, moveCardToList } from '../trello/api.js';
 import type { NewTaskJob, FeedbackJob, CleanupJob, CancelJob } from '../webhook/types.js';
@@ -51,9 +51,22 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
   log.info({ branchName, repos }, 'Resolved branch and repos for task');
 
   const promptOpts = { cardId, cardShortLink, cardName, cardUrl, repos, imageDir: '/workspace/.card-images' };
-  const planPrompt = buildPlanPrompt(promptOpts);
-  const executePrompt = buildExecutePrompt(promptOpts);
-  log.info({ planPromptLength: planPrompt.length, executePromptLength: executePrompt.length }, 'Built two-phase prompts');
+  const { planMode, models, prompts } = config.agent;
+  const planModel = models.plan;
+  const executeModel = models.execute;
+
+  let containerOpts: Parameters<typeof runTaskInContainer>[0];
+
+  if (planMode) {
+    const planPrompt = buildPlanPrompt(promptOpts, prompts.plan);
+    const executePrompt = buildExecutePrompt(promptOpts, prompts.execute);
+    log.info({ planPromptLength: planPrompt.length, executePromptLength: executePrompt.length }, 'Built two-phase prompts');
+    containerOpts = { cardShortLink, cardId, branchName, planPrompt, executePrompt, planModel, executeModel, isFollowUp: false, doneListId: job.data.doneListId };
+  } else {
+    const prompt = buildNewTaskPrompt(promptOpts, prompts.newTask);
+    log.info({ promptLength: prompt.length }, 'Built single-phase prompt (planMode disabled)');
+    containerOpts = { cardShortLink, cardId, branchName, prompt, executeModel, isFollowUp: false, doneListId: job.data.doneListId };
+  }
 
   if (job.data.doingListId) {
     await moveCardToList(cardId, job.data.doingListId).catch((err) =>
@@ -63,18 +76,10 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
   }
 
   try {
-    log.info('Handing off to container backend — starting worker container (Opus plan → Sonnet execute)');
+    log.info({ planMode, planModel, executeModel }, 'Handing off to container backend — starting worker container');
     const startTime = Date.now();
 
-    const { exitCode, logs } = await runTaskInContainer({
-      cardShortLink,
-      cardId,
-      branchName,
-      planPrompt,
-      executePrompt,
-      isFollowUp: false,
-      doneListId: job.data.doneListId,
-    });
+    const { exitCode, logs } = await runTaskInContainer(containerOpts);
 
     const durationMs = Date.now() - startTime;
     log.info(
@@ -117,7 +122,7 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
   const repos = getBoardRepos(boardId);
   log.info({ branchName, repos }, 'Resolved branch and repos for feedback');
 
-  const prompt = buildFeedbackPrompt({ cardId, cardUrl, commentText, commenterName, repos, doneListId: job.data.doneListId });
+  const prompt = buildFeedbackPrompt({ cardId, cardUrl, commentText, commenterName, repos, doneListId: job.data.doneListId }, config.agent.prompts.feedback);
   log.info({ promptLength: prompt.length }, 'Built feedback prompt');
 
   if (job.data.doingListId) {
@@ -136,6 +141,7 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
       cardId,
       branchName,
       prompt,
+      executeModel: config.agent.models.execute,
       isFollowUp: true,
       doneListId: job.data.doneListId,
     });

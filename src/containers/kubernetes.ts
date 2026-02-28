@@ -46,7 +46,7 @@ export class KubernetesBackend implements ContainerBackend {
   }
 
   async runTask(opts: RunTaskOptions): Promise<{ exitCode: number; logs: string }> {
-    const { cardShortLink, cardId, prompt, planPrompt, executePrompt, doneListId, isFollowUp } = opts;
+    const { cardShortLink, cardId, prompt, planPrompt, executePrompt, planModel, executeModel, doneListId, isFollowUp } = opts;
     const jobName = this.jobName(cardShortLink);
     const pvcName = this.pvcName(cardShortLink);
     const log = logger.child({ phase: 'container', backend: 'k8s', job: jobName, namespace: this.namespace });
@@ -128,6 +128,8 @@ export class KubernetesBackend implements ContainerBackend {
                   { name: 'TRELLO_TOKEN',          value: config.trello.token ?? '' },
                   { name: 'CARD_ID',               value: cardId },
                   { name: 'TRELLO_DONE_LIST_ID',   value: doneListId ?? '' },
+                  { name: 'CLAUDE_PLAN_MODEL',     value: planModel ?? 'opus' },
+                  { name: 'CLAUDE_EXECUTE_MODEL',  value: executeModel ?? 'sonnet' },
                   { name: 'CI',                    value: '1' },
                   { name: 'TERM',                  value: 'dumb' },
                 ],
