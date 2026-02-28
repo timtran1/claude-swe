@@ -271,21 +271,23 @@ Latest comment: "${commentText}"
 2. Read all comments on the card using the trello MCP \`get_card_comments\` tool to understand
    the full feedback history and any prior iterations — the latest comment is shown above but
    earlier rounds may provide important context
-3. Understand what change or fix the reviewer is asking for
-4. In each repo under /workspace, read \`CLAUDE.md\` in the root if it exists — it contains project-specific instructions
-5. Run \`mise install\` if a runtime config file exists, then install project dependencies
-6. Implement the requested changes
-7. Run the test suite and ensure all tests pass
-8. If this task involves any UI or frontend changes, do browser verification:
+3. Read /workspace/.plan.md if it exists — it contains the original implementation plan and
+   is essential context for understanding the intended approach and design decisions
+4. Understand what change or fix the reviewer is asking for
+5. In each repo under /workspace, read \`CLAUDE.md\` in the root if it exists — it contains project-specific instructions
+6. Run \`mise install\` if a runtime config file exists, then install project dependencies
+7. Implement the requested changes
+8. Run the test suite and ensure all tests pass
+9. If this task involves any UI or frontend changes, do browser verification:
    a. Start the dev server and use the Playwright MCP server to navigate to the relevant pages
    b. Take screenshots and verify the updated UI looks correct
    c. Check /workspace/.card-images/ for any reference images and compare against them
    d. Iterate until the UI is correct — do NOT commit until it looks right
    Skip this step only if the changes are purely backend with zero UI impact.
-9. Commit and push your changes to the existing PR branch(es)
-10. Post a reply on the Trello card using the trello MCP \`add_comment\` tool (card ID: ${cardId})
+10. Commit and push your changes to the existing PR branch(es)
+11. Post a reply on the Trello card using the trello MCP \`add_comment\` tool (card ID: ${cardId})
     summarizing what you changed in response to the feedback
-${doneListId ? `11. Move the Trello card back to Done using the trello MCP \`move_card\` tool (card ID: ${cardId}, list ID: ${doneListId})` : ''}
+${doneListId ? `12. Move the Trello card back to Done using the trello MCP \`move_card\` tool (card ID: ${cardId}, list ID: ${doneListId})` : ''}
 
 ## Important Rules
 
