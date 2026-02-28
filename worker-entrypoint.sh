@@ -15,6 +15,7 @@ if [ -f /workspace/.feedback-prompt ]; then
   cd /workspace
   exec gosu worker stdbuf -oL claude \
     --print \
+    --verbose \
     --model sonnet \
     --dangerously-skip-permissions \
     "$PROMPT"
@@ -68,6 +69,7 @@ if [ -n "${CLAUDE_PLAN_PROMPT:-}" ]; then
   echo "=== Phase 1: Planning with Opus ==="
   gosu worker stdbuf -oL claude \
     --print \
+    --verbose \
     --model opus \
     --dangerously-skip-permissions \
     "${CLAUDE_PLAN_PROMPT}"
@@ -80,6 +82,7 @@ if [ -n "${CLAUDE_PLAN_PROMPT:-}" ]; then
   echo "=== Phase 2: Executing with Sonnet ==="
   exec gosu worker stdbuf -oL claude \
     --print \
+    --verbose \
     --model sonnet \
     --dangerously-skip-permissions \
     "${CLAUDE_EXECUTE_PROMPT}"
@@ -87,6 +90,7 @@ else
   # Single-phase: Sonnet only (feedback jobs)
   exec gosu worker stdbuf -oL claude \
     --print \
+    --verbose \
     --model sonnet \
     --dangerously-skip-permissions \
     "${CLAUDE_PROMPT}"
