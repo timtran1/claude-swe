@@ -13,6 +13,16 @@ if [ -f /workspace/.feedback-prompt ]; then
   PROMPT="$(cat /workspace/.feedback-prompt)"
   rm /workspace/.feedback-prompt
 
+  # Pull latest changes in each repo so feedback sees any commits pushed since the last run
+  git config --global --add safe.directory /workspace
+  echo "${GITHUB_TOKEN}" | gh auth login --with-token 2>/dev/null || true
+  for repo_dir in /workspace/*/; do
+    if [ -d "${repo_dir}.git" ]; then
+      echo "Pulling latest changes in ${repo_dir}"
+      git -C "$repo_dir" pull --rebase --autostash 2>&1 || echo "Warning: git pull failed in ${repo_dir} — continuing"
+    fi
+  done
+
   # Always write fresh MCP settings (don't rely on PVC state from a prior run)
   mkdir -p /workspace/.claude
   cat > /workspace/.claude/settings.local.json <<MCPEOF
