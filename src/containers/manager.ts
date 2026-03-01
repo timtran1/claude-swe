@@ -35,3 +35,11 @@ export function destroyTaskContainer(cardShortLink: string): Promise<void> {
 export function listWorkerContainers(): Promise<WorkerInfo[]> {
   return backend.listWorkers();
 }
+
+export function streamWorkerLogs(
+  cardShortLink: string,
+  onLine: (line: string) => void,
+  onDone: () => void,
+): Promise<void> {
+  return backend.streamLogs(cardShortLink, onLine, onDone);
+}

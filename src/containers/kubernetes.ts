@@ -11,6 +11,7 @@
  *   - pods/log: get (v1, same namespace)
  *   - persistentvolumeclaims: create, get, delete (v1, same namespace)
  */
+import { PassThrough } from 'node:stream';
 import * as k8s from '@kubernetes/client-node';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
@@ -25,15 +26,16 @@ function sleep(ms: number): Promise<void> {
 }
 
 export class KubernetesBackend implements ContainerBackend {
+  private kc: k8s.KubeConfig;
   private coreApi: k8s.CoreV1Api;
   private batchApi: k8s.BatchV1Api;
   private namespace: string;
 
   constructor() {
-    const kc = new k8s.KubeConfig();
-    kc.loadFromDefault(); // ~/.kube/config locally, service account token in-cluster
-    this.coreApi = kc.makeApiClient(k8s.CoreV1Api);
-    this.batchApi = kc.makeApiClient(k8s.BatchV1Api);
+    this.kc = new k8s.KubeConfig();
+    this.kc.loadFromDefault(); // ~/.kube/config locally, service account token in-cluster
+    this.coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
+    this.batchApi = this.kc.makeApiClient(k8s.BatchV1Api);
     this.namespace = config.containers.kubernetes.namespace;
   }
 
@@ -268,6 +270,57 @@ export class KubernetesBackend implements ContainerBackend {
 
       return { exitCode, logs };
     }
+  }
+
+  async streamLogs(cardShortLink: string, onLine: (line: string) => void, onDone: () => void): Promise<void> {
+    const jobName = this.jobName(cardShortLink);
+
+    // Find the pod for this job (poll briefly if not yet available)
+    let podName: string | undefined;
+    for (let i = 0; i < 12; i++) {
+      try {
+        const { body: podList } = await this.coreApi.listNamespacedPod(
+          this.namespace,
+          undefined, undefined, undefined, undefined,
+          `job-name=${jobName}`,
+        );
+        const pod = podList.items[0];
+        if (pod?.metadata?.name && pod.status?.phase !== 'Pending') {
+          podName = pod.metadata.name;
+          break;
+        }
+      } catch { /* ignore */ }
+      await sleep(5000);
+    }
+
+    if (!podName) {
+      onDone();
+      return;
+    }
+
+    const k8sLog = new k8s.Log(this.kc);
+    const stream = new PassThrough();
+
+    return new Promise((resolve) => {
+      let buffer = '';
+      stream.on('data', (chunk: Buffer) => {
+        buffer += chunk.toString('utf8');
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (line) onLine(line);
+        }
+      });
+      stream.on('end', () => {
+        if (buffer) onLine(buffer);
+        onDone();
+        resolve();
+      });
+      stream.on('error', () => { onDone(); resolve(); });
+
+      k8sLog.log(this.namespace, podName!, 'worker', stream, { follow: true, timestamps: false })
+        .catch(() => { onDone(); resolve(); });
+    });
   }
 
   async destroyTask(cardShortLink: string): Promise<void> {

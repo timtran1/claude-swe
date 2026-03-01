@@ -29,4 +29,10 @@ export interface ContainerBackend {
   runTask(opts: RunTaskOptions): Promise<{ exitCode: number; logs: string }>;
   destroyTask(cardShortLink: string): Promise<void>;
   listWorkers(): Promise<WorkerInfo[]>;
+  /**
+   * Stream logs for a worker identified by cardShortLink.
+   * Calls onLine for each log line (from the beginning), then calls onDone when the stream ends.
+   * Resolves once streaming is complete or if the container is not found.
+   */
+  streamLogs(cardShortLink: string, onLine: (line: string) => void, onDone: () => void): Promise<void>;
 }

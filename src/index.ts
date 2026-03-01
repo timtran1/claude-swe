@@ -5,6 +5,7 @@ import { handleTrelloWebhook, handleGitHubWebhook } from './webhook/handler.js';
 import { listWorkerContainers } from './containers/manager.js';
 import { worker, gracefulShutdown } from './queue/worker.js';
 import { initBotMemberId } from './trello/bot.js';
+import { handleLogViewer, handleLogStream } from './logs/handler.js';
 
 const app = express();
 
@@ -34,6 +35,10 @@ app.get('/workers', async (_req, res) => {
   const containers = await listWorkerContainers();
   res.json(containers);
 });
+
+// Public log viewer — UUID token in URL acts as auth
+app.get('/logs/:token', handleLogViewer);
+app.get('/logs/:token/stream', handleLogStream);
 
 // Trello webhook — handle both HEAD (verification) and POST (events)
 app.all('/webhooks/trello', handleTrelloWebhook);

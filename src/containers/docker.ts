@@ -1,3 +1,4 @@
+import { Writable } from 'node:stream';
 import Docker from 'dockerode';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
@@ -194,6 +195,46 @@ export class DockerBackend implements ContainerBackend {
     log.info('Task complete — container preserved for feedback loop (destroyed on PR close)');
 
     return { exitCode: StatusCode, logs };
+  }
+
+  async streamLogs(cardShortLink: string, onLine: (line: string) => void, onDone: () => void): Promise<void> {
+    const name = this.containerName(cardShortLink);
+    return new Promise((resolve) => {
+      let container: Docker.Container;
+      try {
+        container = this.docker.getContainer(name);
+      } catch {
+        onDone();
+        resolve();
+        return;
+      }
+
+      container.logs({ follow: true, stdout: true, stderr: true }, (err, stream) => {
+        if (err || !stream) {
+          onDone();
+          resolve();
+          return;
+        }
+
+        let buffer = '';
+        const handleChunk = (chunk: Buffer) => {
+          buffer += chunk.toString('utf8');
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (line) onLine(line);
+          }
+        };
+
+        const out = new Writable({ write(chunk, _, cb) { handleChunk(chunk); cb(); } });
+        const err2 = new Writable({ write(chunk, _, cb) { handleChunk(chunk); cb(); } });
+
+        out.on('finish', () => { onDone(); resolve(); });
+        out.on('error', () => { onDone(); resolve(); });
+
+        container.modem.demuxStream(stream, out, err2);
+      });
+    });
   }
 
   async destroyTask(cardShortLink: string): Promise<void> {

@@ -241,6 +241,7 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
     const job: FeedbackJob = {
       cardId: card.id,
       cardShortLink: card.shortLink,
+      cardName: card.name,
       cardUrl: card.url,
       cardDesc: card.desc,
       boardId: board.id,

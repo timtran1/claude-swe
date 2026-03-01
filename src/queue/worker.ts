@@ -6,6 +6,7 @@ import { runTaskInContainer, destroyTaskContainer } from '../containers/manager.
 import { buildPlanPrompt, buildExecutePrompt, buildNewTaskPrompt, buildFeedbackPrompt } from '../agent/prompt.js';
 import { getBoardRepos } from '../workspace/repo.js';
 import { postTrelloComment, moveCardToList } from '../trello/api.js';
+import { createLogSession, removeLogSessionByCard } from '../logs/store.js';
 import type { NewTaskJob, FeedbackJob, CleanupJob, CancelJob } from '../webhook/types.js';
 
 const connection = {
@@ -75,6 +76,16 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
     log.info({ doingListId: job.data.doingListId }, 'Moved card to Doing list');
   }
 
+  // Create a log session and post the live-log URL as a Trello comment
+  const logSession = await createLogSession(cardShortLink, cardId, cardName);
+  if (config.server.webhookBaseUrl) {
+    const logUrl = `${config.server.webhookBaseUrl}/logs/${logSession.token}`;
+    await postTrelloComment(cardId, `🔗 Live worker logs: ${logUrl}`).catch((err) =>
+      log.warn({ err }, 'Failed to post log URL comment'),
+    );
+    log.info({ logUrl }, 'Posted live log URL to Trello');
+  }
+
   try {
     log.info({ planMode, planModel, executeModel }, 'Handing off to container backend — starting worker container');
     const startTime = Date.now();
@@ -110,7 +121,7 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
 }
 
 async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
-  const { cardId, cardShortLink, cardUrl, commentText, commenterName, boardId } = job.data;
+  const { cardId, cardShortLink, cardName, cardUrl, commentText, commenterName, boardId } = job.data;
   const log = logger.child({ phase: 'queue', jobId: job.id, cardId, cardShortLink });
 
   log.info(
@@ -130,6 +141,16 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
       log.warn({ err }, 'Failed to move card to Doing list — continuing'),
     );
     log.info({ doingListId: job.data.doingListId }, 'Moved card to Doing list');
+  }
+
+  // Create a log session and post the live-log URL as a Trello comment
+  const logSession = await createLogSession(cardShortLink, cardId, cardName);
+  if (config.server.webhookBaseUrl) {
+    const logUrl = `${config.server.webhookBaseUrl}/logs/${logSession.token}`;
+    await postTrelloComment(cardId, `🔗 Live worker logs: ${logUrl}`).catch((err) =>
+      log.warn({ err }, 'Failed to post log URL comment'),
+    );
+    log.info({ logUrl }, 'Posted live log URL to Trello');
   }
 
   try {
@@ -180,6 +201,7 @@ async function handleCleanup(job: Job<CleanupJob>): Promise<void> {
 
   log.info({ prUrl, reason }, 'Picked up cleanup job — destroying container and volume');
   await destroyTaskContainer(cardShortLink);
+  await removeLogSessionByCard(cardShortLink);
   log.info({ prUrl, reason }, 'Cleanup complete — container and volume destroyed');
 }
 
