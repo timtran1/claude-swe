@@ -145,8 +145,7 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
     };
 
     await taskQueue.add('new-task', job, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 10_000 },
+      attempts: 1,
     });
 
     logger.info(

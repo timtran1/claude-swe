@@ -96,7 +96,7 @@ if [ -f /workspace/.feedback-prompt ]; then
     --dangerously-skip-permissions \
     --mcp-config "$MCP_CONFIG" \
     "$PROMPT" \
-    | node /opt/mcp/worker-logger.js
+    2>&1 | node /opt/mcp/worker-logger.js
   exit ${PIPESTATUS[0]}
 fi
 
@@ -120,6 +120,10 @@ chown -R worker:worker /workspace
 cd /workspace
 
 if [ -n "${CLAUDE_PLAN_PROMPT:-}" ]; then
+  # Diagnose claude binary accessibility as worker user
+  echo "=== Claude binary check ==="
+  gosu worker sh -c 'which claude && claude --version' 2>&1 || echo "WARNING: claude not found in worker PATH"
+
   # Two-phase: Opus plans, Sonnet executes (new tasks)
   echo "=== Phase 1: Planning with ${CLAUDE_PLAN_MODEL:-opus} ==="
   gosu worker claude \
@@ -129,7 +133,7 @@ if [ -n "${CLAUDE_PLAN_PROMPT:-}" ]; then
     --dangerously-skip-permissions \
     --mcp-config "$MCP_CONFIG" \
     "${CLAUDE_PLAN_PROMPT}" \
-    | node /opt/mcp/worker-logger.js
+    2>&1 | node /opt/mcp/worker-logger.js
   # Capture claude's exit code (left side of pipe), not the logger's
   PLAN_EXIT=${PIPESTATUS[0]}
   if [ "$PLAN_EXIT" -ne 0 ]; then exit "$PLAN_EXIT"; fi
@@ -147,7 +151,7 @@ if [ -n "${CLAUDE_PLAN_PROMPT:-}" ]; then
     --dangerously-skip-permissions \
     --mcp-config "$MCP_CONFIG" \
     "${CLAUDE_EXECUTE_PROMPT}" \
-    | node /opt/mcp/worker-logger.js
+    2>&1 | node /opt/mcp/worker-logger.js
   exit ${PIPESTATUS[0]}
 else
   # Single-phase: execute model only (feedback jobs or planMode=false)
@@ -158,6 +162,6 @@ else
     --dangerously-skip-permissions \
     --mcp-config "$MCP_CONFIG" \
     "${CLAUDE_PROMPT}" \
-    | node /opt/mcp/worker-logger.js
+    2>&1 | node /opt/mcp/worker-logger.js
   exit ${PIPESTATUS[0]}
 fi
