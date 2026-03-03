@@ -8,35 +8,33 @@ const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity 
 
 function summarizeInput(toolName, input) {
   if (!input || typeof input !== 'object') return '';
-  const s = (str, max = 120) => String(str ?? '').slice(0, max) + (String(str ?? '').length > max ? '…' : '');
   switch (toolName) {
-    case 'Bash':          return s(input.command);
-    case 'Read':          return s(input.file_path);
-    case 'Write':         return s(input.file_path);
-    case 'Edit':          return s(input.file_path);
-    case 'Glob':          return s(input.pattern);
-    case 'Grep':          return s(input.pattern);
-    case 'WebFetch':      return s(input.url);
-    case 'WebSearch':     return s(input.query);
-    case 'Agent':         return s(input.description || input.prompt);
+    case 'Bash':          return String(input.command ?? '');
+    case 'Read':          return String(input.file_path ?? '');
+    case 'Write':         return String(input.file_path ?? '');
+    case 'Edit':          return String(input.file_path ?? '');
+    case 'Glob':          return String(input.pattern ?? '');
+    case 'Grep':          return String(input.pattern ?? '');
+    case 'WebFetch':      return String(input.url ?? '');
+    case 'WebSearch':     return String(input.query ?? '');
+    case 'Agent':         return String(input.description || input.prompt || '');
     case 'TodoWrite':     return `(${(input.todos || []).length} items)`;
-    default:              return s(JSON.stringify(input));
+    default:              return JSON.stringify(input);
   }
 }
 
-function summarizeContent(content) {
+function formatContent(content) {
   if (!content) return '';
-  if (typeof content === 'string') return content.slice(0, 300) + (content.length > 300 ? '…' : '');
+  if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
-    const text = content.map(c => {
+    return content.map(c => {
       if (typeof c === 'string') return c;
       if (c.type === 'text') return c.text;
       if (c.type === 'image') return '[image]';
       return JSON.stringify(c);
     }).join(' ');
-    return text.slice(0, 300) + (text.length > 300 ? '…' : '');
   }
-  return JSON.stringify(content).slice(0, 300);
+  return JSON.stringify(content);
 }
 
 let exitCode = 0;
@@ -57,22 +55,20 @@ rl.on('line', (line) => {
       const contents = event.message?.content ?? [];
       for (const block of contents) {
         if (block.type === 'text' && block.text?.trim()) {
-          const preview = block.text.trim().replace(/\n+/g, ' ').slice(0, 200);
-          console.log(`[text]       ${preview}${block.text.length > 200 ? '…' : ''}`);
+          console.log(`[text]       ${block.text.trim()}`);
         } else if (block.type === 'tool_use') {
           const summary = summarizeInput(block.name, block.input);
           console.log(`[tool_use]   ${block.name}${summary ? ': ' + summary : ''}`);
         } else if (block.type === 'thinking' && block.thinking?.trim()) {
-          const preview = block.thinking.trim().replace(/\n+/g, ' ').slice(0, 120);
-          console.log(`[thinking]   ${preview}…`);
+          console.log(`[thinking]   ${block.thinking.trim()}`);
         }
       }
       break;
     }
     case 'tool_result': {
-      const summary = summarizeContent(event.content);
-      if (summary) {
-        console.log(`[tool_result] ${summary.replace(/\n+/g, ' ')}`);
+      const text = formatContent(event.content);
+      if (text) {
+        console.log(`[tool_result] ${text}`);
       }
       break;
     }
