@@ -126,6 +126,11 @@ if [ -n "${CLAUDE_PLAN_PROMPT:-}" ]; then
 
   # Two-phase: Opus plans, Sonnet executes (new tasks)
   echo "=== Phase 1: Planning with ${CLAUDE_PLAN_MODEL:-opus} ==="
+  PROMPT_LEN=${#CLAUDE_PLAN_PROMPT}
+  echo "DEBUG: Plan prompt length = ${PROMPT_LEN} bytes"
+  echo "DEBUG: Plan prompt first 200 chars: ${CLAUDE_PLAN_PROMPT:0:200}"
+  echo "DEBUG: Plan prompt last 100 chars: ${CLAUDE_PLAN_PROMPT: -100}"
+  echo "DEBUG: Running claude as user $(gosu worker whoami) with model ${CLAUDE_PLAN_MODEL:-opus}"
   gosu worker claude \
     --output-format stream-json \
     --verbose \
@@ -133,9 +138,21 @@ if [ -n "${CLAUDE_PLAN_PROMPT:-}" ]; then
     --dangerously-skip-permissions \
     --mcp-config "$MCP_CONFIG" \
     "${CLAUDE_PLAN_PROMPT}" \
-    2>&1 | node /opt/mcp/worker-logger.js
+    2>&1 | tee /tmp/claude-raw-output.log | node /opt/mcp/worker-logger.js
   # Capture claude's exit code (left side of pipe), not the logger's
   PLAN_EXIT=${PIPESTATUS[0]}
+  echo "DEBUG: Claude plan exit code = ${PLAN_EXIT}"
+  RAW_LINES=$(wc -l < /tmp/claude-raw-output.log 2>/dev/null || echo 0)
+  RAW_BYTES=$(wc -c < /tmp/claude-raw-output.log 2>/dev/null || echo 0)
+  echo "DEBUG: Raw claude output = ${RAW_LINES} lines, ${RAW_BYTES} bytes"
+  if [ "$RAW_BYTES" -gt 0 ] 2>/dev/null; then
+    echo "DEBUG: First 500 chars of raw output:"
+    head -c 500 /tmp/claude-raw-output.log
+    echo ""
+    echo "DEBUG: Last 500 chars of raw output:"
+    tail -c 500 /tmp/claude-raw-output.log
+    echo ""
+  fi
   if [ "$PLAN_EXIT" -ne 0 ]; then
     echo "ERROR: Planning phase exited with code ${PLAN_EXIT}" >&2
     echo "Check the logs above for the full error from Claude." >&2
