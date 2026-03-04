@@ -114,7 +114,7 @@ async function ensureTrelloWebhooks(): Promise<void> {
 }
 
 process.on('unhandledRejection', (reason) => {
-  logger.error({ reason }, 'Unhandled promise rejection');
+  logger.error({ err: reason instanceof Error ? reason : new Error(String(reason)) }, 'Unhandled promise rejection');
 });
 
 (async () => {

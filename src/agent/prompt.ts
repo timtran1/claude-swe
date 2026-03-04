@@ -260,11 +260,22 @@ interface FeedbackPromptOptions {
   commentText: string;
   commenterName: string;
   repos: string[];
+  imageDir?: string;
   doneListId?: string;
 }
 
 export function buildFeedbackPrompt(opts: FeedbackPromptOptions, additionalPrompt?: string): string {
-  const { cardId, cardShortLink, cardUrl, commentText, commenterName, doneListId } = opts;
+  const { cardId, cardShortLink, cardUrl, commentText, commenterName, imageDir, doneListId } = opts;
+
+  const imageSection = imageDir
+    ? `
+## Visual References
+
+Reference images from the Trello card (including any images attached in comments) have been
+saved to ${imageDir}/. If the reviewer's feedback is visual (e.g. a screenshot of a bug or
+a UI mockup), check this directory — the images will be there.
+`
+    : '';
 
   return `
 You are an autonomous software engineer handling review feedback on a pull request.
@@ -275,7 +286,7 @@ Trello card: ${cardUrl}
 Card ID: ${cardId}
 Reviewer: ${commenterName}
 Latest comment: "${commentText}"
-
+${imageSection}
 ## Steps to Complete
 
 1. Read the Trello card using the trello MCP \`get_card\` tool for full context

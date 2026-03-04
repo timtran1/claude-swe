@@ -88,6 +88,12 @@ if [ -f /workspace/.feedback-prompt ]; then
     fi
   done
 
+  # Re-download card images so Claude sees any images attached via comments since last run
+  IMAGE_DIR="/workspace/.card-images"
+  mkdir -p "$IMAGE_DIR"
+  node /opt/mcp/download-images.mjs "${CARD_ID}" "$IMAGE_DIR" \
+    || echo "Warning: image download failed — continuing"
+
   chown -R worker:worker /workspace
 
   cd /workspace
