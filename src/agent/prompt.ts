@@ -105,7 +105,10 @@ ${buildRepoSection(repos)}
      b. Describe the steps to run the app locally, including database setup, backend, docker containers, etc.
      c. Include any authentication steps required to access the app, default credentials if available
      d. Specify exactly which pages/components to open in the browser, what interactions to perform, and what the result should look like
-     e. Skip this section only for pure backend tasks or projects with no frontend impact
+     e. To attach screenshots to Trello, the executor should save to file with \`browser_take_screenshot\` then upload via:
+        \`curl -X POST "https://api.trello.com/1/cards/{cardId}/attachments?key=$TRELLO_API_KEY&token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg" -F "name=screenshot.jpeg"\`
+        Do NOT plan for base64 encoding or browser_run_code — base64 bloats the context window and causes timeouts.
+     f. Skip this section only for pure backend tasks or projects with no frontend impact
    - **Done Criteria**: Exact conditions that must be true for the task to be complete
 
 ## Critical Rules
