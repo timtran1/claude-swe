@@ -221,7 +221,12 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
       return;
     }
 
-    if (botMemberId && memberCreator.id === botMemberId) {
+    if (!botMemberId) {
+      logger.warn({ phase: 'webhook', cardId: card.id }, 'botMemberId not resolved — skipping comment to avoid self-triggering');
+      return;
+    }
+
+    if (memberCreator.id === botMemberId) {
       logger.info({ phase: 'webhook', cardId: card.id }, 'Ignoring comment from bot itself');
       return;
     }
