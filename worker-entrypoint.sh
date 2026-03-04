@@ -68,7 +68,7 @@ cat > "${WORKER_HOME}/.claude.json" <<MCPEOF
     },
     "playwright": {
       "command": "npx",
-      "args": ["@playwright/mcp", "--headless", "--user-data-dir", "/tmp/playwright-mcp"]
+      "args": ["@playwright/mcp", "--headless", "--browser", "chromium", "--user-data-dir", "/tmp/playwright-mcp"]
     }
   }
 }
