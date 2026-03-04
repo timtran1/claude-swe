@@ -165,10 +165,10 @@ Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on 
    - If reference images exist in ${imageDir || '/workspace/.card-images'}/, compare against them and iterate until they match
    - Do NOT commit until the UI looks right — paste a final screenshot into the PR body as evidence
    - Skip this step only if the task or project is purely backend with zero UI impact.
-   - **To attach a screenshot to Trello or include in a PR:** use browser_run_code to get base64 directly
-     (do NOT save to file and read it — screenshot files exceed the Read tool output limit):
-     async (page) => 'data:image/jpeg;base64,' + (await page.screenshot({ type: 'jpeg', quality: 60 })).toString('base64')
-     Pass the returned string to mcp__trello__attach_image_data_to_card.
+   - **To attach a screenshot to Trello:** save it to a file with \`browser_take_screenshot\`,
+     then upload via curl:
+     \`curl -X POST "https://api.trello.com/1/cards/{cardId}/attachments?key=$TRELLO_API_KEY&token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg" -F "name=screenshot.jpeg"\`
+     Do NOT use base64 or browser_run_code for screenshots — the base64 string bloats the context window and causes timeouts.
 6. Commit all changes with a clear, descriptive message (do this in each repo that has changes)
 7. For each repo with changes, push the branch and open a PR using the gh CLI:
    \`gh pr create --title "<task name>" --body "<summary of changes>"\`
@@ -247,9 +247,10 @@ ${buildRepoSection(repos)}
    d. If reference images exist in ${imageDir || '/workspace/.card-images'}/, compare against them and iterate until they match
    e. Fix, screenshot, compare — keep iterating until the UI is correct
    f. Do NOT move forward until the UI visually matches the expected result
-   g. To attach a screenshot to Trello or PR: use browser_run_code to capture base64 directly —
-      async (page) => 'data:image/jpeg;base64,' + (await page.screenshot({ type: 'jpeg', quality: 60 })).toString('base64')
-      then pass to mcp__trello__attach_image_data_to_card. Do NOT read screenshot files via the Read tool.
+   g. To attach a screenshot to Trello: save it to a file with \`browser_take_screenshot\`,
+      then upload via curl:
+      \`curl -X POST "https://api.trello.com/1/cards/{cardId}/attachments?key=$TRELLO_API_KEY&token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg" -F "name=screenshot.jpeg"\`
+      Do NOT use base64 or browser_run_code for screenshots — the base64 string bloats the context window and causes timeouts.
    Skip this step only if the task is purely backend with zero UI impact.
 9. Commit all changes with a clear, descriptive message (do this in each repo that has changes)
 10. For each repo with changes, push the branch and open a PR using the gh CLI:
@@ -265,7 +266,7 @@ ${buildRepoSection(repos)}
 - Do NOT open a PR if there are failing tests
 - Write clean, idiomatic code that matches the existing codebase style
 - If anything is unclear, make a reasonable implementation choice and document it
-- Always use the Trello MCP tools (get_card, add_comment, move_card, etc.) — NEVER use curl or direct HTTP requests to the Trello API
+- Prefer Trello MCP tools for reading/writing card data (get_card, add_comment, move_card, etc.) — use curl only for file uploads (attachments)
 - If you use \`docker compose\` for test services, always pass \`--project-name claude-${cardShortLink}\` so services are isolated and cleaned up automatically on exit
 - Docker is available in this environment via the \`$DOCKER_HOST\` environment variable — do not override or change \`DOCKER_HOST\`
 ${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
@@ -344,9 +345,10 @@ Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on 
    b. Take screenshots and verify the updated UI looks correct
    c. Check /workspace/.card-images/ for any reference images and compare against them
    d. Iterate until the UI is correct — do NOT commit until it looks right
-   e. To attach a screenshot to Trello: use browser_run_code to capture base64 directly —
-      async (page) => 'data:image/jpeg;base64,' + (await page.screenshot({ type: 'jpeg', quality: 60 })).toString('base64')
-      then pass to mcp__trello__attach_image_data_to_card. Do NOT read screenshot files via the Read tool.
+   e. To attach a screenshot to Trello: save it to a file with \`browser_take_screenshot\`,
+      then upload via curl:
+      \`curl -X POST "https://api.trello.com/1/cards/{cardId}/attachments?key=$TRELLO_API_KEY&token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg" -F "name=screenshot.jpeg"\`
+      Do NOT use base64 or browser_run_code for screenshots — the base64 string bloats the context window and causes timeouts.
    Skip this step only if the changes are purely backend with zero UI impact.
 11. Commit and push your changes to the existing PR branch(es)
 12. Post a reply on the Trello card using the trello MCP \`add_comment\` tool (card ID: ${cardId})
@@ -359,7 +361,7 @@ ${doneListId ? `13. Move the Trello card back to Done using the trello MCP \`mov
 - Do not open a new PR — push to the existing branch
 - Post your summary comment on the Trello card only — do NOT comment on the GitHub PR
 - Keep the response comment concise and factual
-- Always use the Trello MCP tools (get_card, add_comment, move_card, etc.) — NEVER use curl or direct HTTP requests to the Trello API
+- Prefer Trello MCP tools for reading/writing card data (get_card, add_comment, move_card, etc.) — use curl only for file uploads (attachments)
 - If you use \`docker compose\` for test services, always pass \`--project-name claude-${cardShortLink}\` so services are isolated and cleaned up automatically on exit
 - Docker is available in this environment via the \`$DOCKER_HOST\` environment variable — do not override or change \`DOCKER_HOST\`
 ${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
