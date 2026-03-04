@@ -51,12 +51,12 @@
     "workerImage": "ghcr.io/deepselsystems/claude-swe-worker:latest",
     "concurrency": 10,
     "docker": {
-      "enableSocketMount": false
+      "enableSocketMount": true
     },
     "kubernetes": {
       "namespace": "claude-swe",
       "storageClass": "local-storage",
-      "enableDinD": false
+      "enableDinD": true
     }
   }
 }
