@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     unzip \
     gosu \
+    imagemagick \
     && rm -rf /var/lib/apt/lists/*
 
 # mise — universal runtime version manager
@@ -27,7 +28,7 @@ RUN echo 'eval "$(/root/.local/bin/mise activate bash)"' >> /root/.bashrc \
     && mise settings set experimental true
 
 # Pre-install common Node and Python versions so mise doesn't download them at runtime
-RUN mise install node@18 node@20 node@22 python@3.11 python@3.12 python@3.13 \
+RUN mise install node@18 node@20 node@22 python@3.10 python@3.11 python@3.12 python@3.13 python@3.14 python@3.15 \
     && chmod -R a+rX /opt/mise
 
 # gh CLI — used by Claude to open PRs, check status, etc.

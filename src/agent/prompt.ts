@@ -143,6 +143,15 @@ The workspace is already prepared:
 - Runtime and dependencies have been installed
 - A detailed implementation plan is at /workspace/.plan.md
 ${imageSection}
+## Environment
+
+The following runtimes are pre-installed via mise and available immediately (no download needed):
+- **Node.js**: 18, 20, 22
+- **Python**: 3.10, 3.11, 3.12, 3.13, 3.14, 3.15
+- **Tools**: git, gh (GitHub CLI), docker CLI, imagemagick
+
+Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on a \`.mise.toml\` / \`.python-version\` / \`.nvmrc\` file in the repo.
+
 ## Steps to Complete
 
 1. Read /workspace/.plan.md — this is your specification, follow it precisely
@@ -156,6 +165,10 @@ ${imageSection}
    - If reference images exist in ${imageDir || '/workspace/.card-images'}/, compare against them and iterate until they match
    - Do NOT commit until the UI looks right — paste a final screenshot into the PR body as evidence
    - Skip this step only if the task or project is purely backend with zero UI impact.
+   - **To attach a screenshot to Trello or include in a PR:** use browser_run_code to get base64 directly
+     (do NOT save to file and read it — screenshot files exceed the Read tool output limit):
+     async (page) => 'data:image/jpeg;base64,' + (await page.screenshot({ type: 'jpeg', quality: 60 })).toString('base64')
+     Pass the returned string to mcp__trello__attach_image_data_to_card.
 6. Commit all changes with a clear, descriptive message (do this in each repo that has changes)
 7. For each repo with changes, push the branch and open a PR using the gh CLI:
    \`gh pr create --title "<task name>" --body "<summary of changes>"\`
@@ -234,6 +247,9 @@ ${buildRepoSection(repos)}
    d. If reference images exist in ${imageDir || '/workspace/.card-images'}/, compare against them and iterate until they match
    e. Fix, screenshot, compare — keep iterating until the UI is correct
    f. Do NOT move forward until the UI visually matches the expected result
+   g. To attach a screenshot to Trello or PR: use browser_run_code to capture base64 directly —
+      async (page) => 'data:image/jpeg;base64,' + (await page.screenshot({ type: 'jpeg', quality: 60 })).toString('base64')
+      then pass to mcp__trello__attach_image_data_to_card. Do NOT read screenshot files via the Read tool.
    Skip this step only if the task is purely backend with zero UI impact.
 9. Commit all changes with a clear, descriptive message (do this in each repo that has changes)
 10. For each repo with changes, push the branch and open a PR using the gh CLI:
@@ -295,6 +311,15 @@ Card ID: ${cardId}
 Reviewer: ${commenterName}
 Latest comment: "${commentText}"
 ${imageSection}
+## Environment
+
+The following runtimes are pre-installed via mise and available immediately (no download needed):
+- **Node.js**: 18, 20, 22
+- **Python**: 3.10, 3.11, 3.12, 3.13, 3.14, 3.15
+- **Tools**: git, gh (GitHub CLI), docker CLI, imagemagick
+
+Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on a \`.mise.toml\` / \`.python-version\` / \`.nvmrc\` file in the repo.
+
 ## Steps to Complete
 
 1. Read the Trello card using the trello MCP \`get_card\` tool for full context
@@ -319,6 +344,9 @@ ${imageSection}
    b. Take screenshots and verify the updated UI looks correct
    c. Check /workspace/.card-images/ for any reference images and compare against them
    d. Iterate until the UI is correct — do NOT commit until it looks right
+   e. To attach a screenshot to Trello: use browser_run_code to capture base64 directly —
+      async (page) => 'data:image/jpeg;base64,' + (await page.screenshot({ type: 'jpeg', quality: 60 })).toString('base64')
+      then pass to mcp__trello__attach_image_data_to_card. Do NOT read screenshot files via the Read tool.
    Skip this step only if the changes are purely backend with zero UI impact.
 11. Commit and push your changes to the existing PR branch(es)
 12. Post a reply on the Trello card using the trello MCP \`add_comment\` tool (card ID: ${cardId})
