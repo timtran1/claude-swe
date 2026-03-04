@@ -59,7 +59,8 @@ RUN npm install -g @playwright/mcp
 # Install Playwright browsers to a shared path readable by all users (not /root/.cache which worker can't access)
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN $(npm root -g)/@playwright/mcp/node_modules/.bin/playwright install --with-deps chromium \
-    && chmod -R 755 /opt/ms-playwright
+    && chmod -R 755 /opt/ms-playwright \
+    && chmod a+w /opt/ms-playwright
 
 # Trello MCP — pre-installed so npx uses local copy without downloading at runtime
 RUN npm install -g @delorenj/mcp-server-trello
