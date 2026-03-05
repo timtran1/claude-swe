@@ -75,8 +75,8 @@ export class KubernetesBackend implements ContainerBackend {
     // For feedback runs: inject the prompt via an init container that writes
     // .feedback-prompt to the PVC. The worker entrypoint detects this file and
     // skips setup, running claude directly. Base64-encode to avoid shell escaping.
-    const initContainers: k8s.V1Container[] = isFollowUp ? [
-      {
+    const initContainers: k8s.V1Container[] = [
+      ...(isFollowUp ? [{
         name: 'write-prompt',
         image: 'busybox',
         command: ['sh', '-c', 'printf "%s" "$PROMPT_B64" | base64 -d > /workspace/.feedback-prompt'],
@@ -86,8 +86,29 @@ export class KubernetesBackend implements ContainerBackend {
         volumeMounts: [
           { name: 'workspace', mountPath: '/workspace' },
         ],
-      },
-    ] : [];
+      } as k8s.V1Container] : []),
+      // DinD sidecar: declared as an init container with restartPolicy=Always (K8s 1.29+ sidecar
+      // pattern). K8s starts it alongside the main worker container and automatically terminates
+      // it when the worker exits — unlike a regular container, it won't keep the Job alive forever.
+      ...(enableDinD ? [{
+        name: 'dind',
+        image: 'docker:27-dind',
+        restartPolicy: 'Always',
+        securityContext: { privileged: true },
+        args: ['--host=unix:///var/run/dind/docker.sock'],
+        env: [
+          { name: 'DOCKER_TLS_CERTDIR', value: '' }, // TLS off — socket is pod-internal
+        ],
+        volumeMounts: [
+          { name: 'docker-sock', mountPath: '/var/run/dind' },
+          { name: 'docker-lib', mountPath: '/var/lib/docker' },
+        ],
+        resources: {
+          requests: { memory: '256Mi', cpu: '200m' },
+          limits:   { memory: '2Gi' },
+        },
+      } as k8s.V1Container] : []),
+    ];
 
     if (isFollowUp) {
       log.info('Feedback run — init container will write prompt to PVC, worker will skip setup');
@@ -112,24 +133,6 @@ export class KubernetesBackend implements ContainerBackend {
             restartPolicy: 'Never',
             ...(initContainers.length > 0 ? { initContainers } : {}),
             containers: [
-              // DinD sidecar: runs a Docker daemon that the worker talks to via shared socket
-              ...(enableDinD ? [{
-                name: 'dind',
-                image: 'docker:27-dind',
-                securityContext: { privileged: true },
-                args: ['--host=unix:///var/run/dind/docker.sock'],
-                env: [
-                  { name: 'DOCKER_TLS_CERTDIR', value: '' }, // TLS off — socket is pod-internal
-                ],
-                volumeMounts: [
-                  { name: 'docker-sock', mountPath: '/var/run/dind' },
-                  { name: 'docker-lib', mountPath: '/var/lib/docker' },
-                ],
-                resources: {
-                  requests: { memory: '256Mi', cpu: '200m' },
-                  limits:   { memory: '2Gi' },
-                },
-              } as k8s.V1Container] : []),
               {
                 name: 'worker',
                 image: config.containers.workerImage,
