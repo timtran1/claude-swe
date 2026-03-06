@@ -12,6 +12,7 @@
     "lint": "eslint src mcp test --ext .ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@kubernetes/client-node": "^0.21.0",
     "bullmq": "^5.0.0",
     "dockerode": "^4.0.0",

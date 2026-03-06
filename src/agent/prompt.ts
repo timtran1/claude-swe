@@ -335,20 +335,14 @@ Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on 
 2. Read all comments on the card using the trello MCP \`get_card_comments\` tool to understand
    the full feedback history and any prior iterations — the latest comment is shown above but
    earlier rounds may provide important context
-3. **Evaluate whether the comment is actually feedback or an instruction for you.**
-   Not every comment on a card is meant as feedback for Claude. If the comment is:
-   - A conversation between humans (e.g. status updates, questions to each other, general discussion)
-   - Not related to code changes or the implementation
-   - Not requesting any action from you
-   Then return "Comment Not For Me" without any explanation and exit without making any changes.
-4. Read /workspace/.plan.md if it exists — it contains the original implementation plan and
+3. Read /workspace/.plan.md if it exists — it contains the original implementation plan and
    is essential context for understanding the intended approach and design decisions
-5. Understand what change or fix the reviewer is asking for
-6. In each repo under /workspace, read \`CLAUDE.md\` in the root if it exists — it contains project-specific instructions
-7. Run \`mise install\` if a runtime config file exists, then install project dependencies
-8. Implement the requested changes
-9. Run the test suite and ensure all tests pass
-10. If this task involves any UI or frontend changes, do browser verification:
+4. Understand what change or fix the reviewer is asking for
+5. In each repo under /workspace, read \`CLAUDE.md\` in the root if it exists — it contains project-specific instructions
+6. Run \`mise install\` if a runtime config file exists, then install project dependencies
+7. Implement the requested changes
+8. Run the test suite and ensure all tests pass
+9. If this task involves any UI or frontend changes, do browser verification:
    a. Start the dev server and use the Playwright MCP server to navigate to the relevant pages
    b. Take screenshots and verify the updated UI looks correct
    c. Check /workspace/.card-images/ for any reference images and compare against them
@@ -358,13 +352,13 @@ Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on 
       \`curl -s -X POST "https://api.trello.com/1/cards/{cardId}/attachments" -F "key=$TRELLO_API_KEY" -F "token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg;type=image/jpeg" -F "name=screenshot.jpeg"\`
       Do NOT use base64 or browser_run_code for screenshots — the base64 string bloats the context window and causes timeouts.
    Skip this step only if the changes are purely backend with zero UI impact.
-11. Commit and push your changes:
+10. Commit and push your changes:
     - Check if the branch still exists on the remote: \`git ls-remote --heads origin claude/${cardShortLink}\`
     - If it exists: push to it (the PR should still be open)
     - If it was deleted (previous PR was merged/closed): create the branch fresh and open a new PR with \`gh pr create\`
-12. Post a reply on the Trello card using the trello MCP \`add_comment\` tool (card ID: ${cardId})
+11. Post a reply on the Trello card using the trello MCP \`add_comment\` tool (card ID: ${cardId})
     summarizing what you changed in response to the feedback
-${doneListId ? `13. Move the Trello card back to Done using the trello MCP \`move_card\` tool (card ID: ${cardId}, list ID: ${doneListId})` : ''}
+${doneListId ? `12. Move the Trello card back to Done using the trello MCP \`move_card\` tool (card ID: ${cardId}, list ID: ${doneListId})` : ''}
 
 ## Important Rules
 

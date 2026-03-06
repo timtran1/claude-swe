@@ -36,7 +36,7 @@ Each worker container has:
 2. **Orchestrator** enqueues a `new-task` job
 3. **Worker** clones the repo into a persistent Docker volume, spins up a container
 4. **Claude Code** (inside the container) reads the card via Trello MCP, installs deps via `mise`, codes, tests (including Playwright visual tests), opens a PR, moves card to Done
-5. **Human comments** on the card → another webhook → orchestrator re-uses the same volume, runs Claude again with the feedback as a follow-up prompt
+5. **Human comments** on the card → another webhook → a Haiku guard call checks whether the comment is directed at the agent (human-to-human chatter is silently skipped) → orchestrator re-uses the same volume, runs Claude again with the feedback as a follow-up prompt
 6. **PR merged/closed** → GitHub webhook → orchestrator destroys the container and volume
 
 ## Setup
@@ -93,7 +93,7 @@ Edit `config.json` — non-sensitive settings live here:
 {
   "agent": {
     "planMode": true,
-    "models": { "plan": "opus", "execute": "sonnet" },
+    "models": { "plan": "opus", "execute": "sonnet", "guard": "haiku" },
     "prompts": {
       "plan": "",
       "execute": "",
@@ -232,6 +232,7 @@ src/
     api.ts              — Thin Trello client for error comments and card moves
   agent/
     prompt.ts           — Build prompts for Claude Code
+    guard.ts            — Haiku-based pre-filter: skips feedback jobs for non-agent comments
 
 mcp/
   trello-server/        — MCP server baked into worker image
@@ -248,6 +249,7 @@ mcp/
 | `agent.planMode` | `true` (default): two-phase Opus plan → Sonnet execute. `false`: single-phase with the execute model only |
 | `agent.models.plan` | Model used for the planning phase (default: `"opus"`) |
 | `agent.models.execute` | Model used for execution, feedback, and single-phase tasks (default: `"sonnet"`) |
+| `agent.models.guard` | Model used to pre-filter feedback comments before spinning up a container (default: `"haiku"`). Human-to-human conversations are silently skipped; only comments directed at the agent trigger the full feedback loop. |
 | `agent.prompts.plan` | Extra instructions appended to the planning prompt (optional) |
 | `agent.prompts.execute` | Extra instructions appended to the execution prompt (optional) |
 | `agent.prompts.newTask` | Extra instructions appended to the single-phase new-task prompt (optional, used when `planMode` is `false`) |

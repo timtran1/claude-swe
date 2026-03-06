@@ -4,6 +4,7 @@ import { taskQueue } from './queue.js';
 import { logger } from '../logger.js';
 import { runTaskInContainer, destroyTaskContainer } from '../containers/manager.js';
 import { buildPlanPrompt, buildExecutePrompt, buildNewTaskPrompt, buildFeedbackPrompt } from '../agent/prompt.js';
+import { shouldProcessFeedback } from '../agent/guard.js';
 import { getBoardRepos, getAllRepoSlugs } from '../workspace/repo.js';
 import { findOpenPRsForBranch } from '../github/pr.js';
 import { postTrelloComment, moveCardToList } from '../trello/api.js';
@@ -137,6 +138,13 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
     { commenter: commenterName, commentLength: commentText.length, attempt: job.attemptsMade + 1 },
     'Picked up feedback job',
   );
+
+  // Guard: skip if the comment isn't directed at the agent
+  const isForAgent = await shouldProcessFeedback(commentText, commenterName, cardName);
+  if (!isForAgent) {
+    log.info({ commenter: commenterName }, 'Guard determined comment is not for the agent — skipping');
+    return;
+  }
 
   const branchName = `claude/${cardShortLink}`;
   const repos = getBoardRepos(boardId);

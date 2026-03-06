@@ -14,7 +14,7 @@ The main process (`src/index.ts`) is a thin webhook server + BullMQ job processo
 1. Trello webhook (`POST /webhooks/trello`) → `src/webhook/handler.ts` verifies HMAC-SHA1 signature and routes by action type:
    - `addMemberToCard` (bot assigned) → enqueues `new-task` job
    - `removeMemberFromCard` (bot removed) → enqueues `cancel` job
-   - `commentCard` (human comment) → enqueues `feedback` job
+   - `commentCard` (human comment) → Haiku guard (`src/agent/guard.ts`) filters non-agent comments → enqueues `feedback` job
 2. GitHub webhook (`POST /webhooks/github`) → verifies HMAC-SHA256; on `pull_request closed` for `claude/*` branches → enqueues `cleanup` job
 3. BullMQ worker (`src/queue/worker.ts`) dequeues jobs and calls `containers/manager.ts`
 
@@ -36,7 +36,7 @@ Worker containers run `worker-entrypoint.sh`, which:
 
 Config file: `config.json` (copy from `config.example.json`). Secrets: `.env`.
 
-Key config fields: `agent.planMode` (two-phase vs single-phase), `agent.models.{plan,execute}`, `agent.prompts.*` (extra instructions appended to built-in prompts), `containers.backend` (`docker`|`kubernetes`), `containers.concurrency`.
+Key config fields: `agent.planMode` (two-phase vs single-phase), `agent.models.{plan,execute,guard}`, `agent.prompts.*` (extra instructions appended to built-in prompts), `containers.backend` (`docker`|`kubernetes`), `containers.concurrency`.
 
 ### Agent Prompts
 
@@ -45,6 +45,8 @@ Key config fields: `agent.planMode` (two-phase vs single-phase), `agent.models.{
 - `buildExecutePrompt` — instructs Claude to implement from the plan
 - `buildNewTaskPrompt` — single-phase (plan + execute in one pass)
 - `buildFeedbackPrompt` — handle reviewer comment on existing PR branch
+
+`src/agent/guard.ts` — Haiku-based pre-filter for feedback jobs. Before spinning up a container, calls the Anthropic API with the comment text to classify whether it's actually directed at the agent. Human-to-human conversations are silently skipped. Fails open (processes feedback) on API error.
 
 Custom instructions from `config.json` are appended to each prompt type via `agent.prompts.*`.
 

@@ -3,7 +3,8 @@
     "planMode": true,
     "models": {
       "plan": "opus",
-      "execute": "sonnet"
+      "execute": "sonnet",
+      "guard": "haiku"
     },
     "prompts": {
       "plan": "Additional instructions for planning mode",

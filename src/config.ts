@@ -41,6 +41,7 @@ const agentSchema = z.object({
   models: z.object({
     plan: z.string().default('opus'),
     execute: z.string().default('sonnet'),
+    guard: z.string().default('haiku'),
   }).default({}),
   prompts: z.object({
     plan: z.string().optional(),
