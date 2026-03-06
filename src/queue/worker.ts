@@ -25,6 +25,10 @@ const cancelledCards = new Set<string>();
 // work on the latest comment rather than waiting for the previous one to finish.
 const activeFeedbackJobs = new Map<string, AbortController>();
 
+// Active new-task jobs keyed by cardShortLink.
+// When a feedback comment passes the guard, the running new-task is killed immediately.
+const activeNewTaskJobs = new Map<string, AbortController>();
+
 export const worker = new Worker(
   'tasks',
   async (job: Job) => {
@@ -94,6 +98,10 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
     log.info({ logUrl }, 'Posted live log URL to Trello');
   }
 
+  const abortController = new AbortController();
+  activeNewTaskJobs.set(cardShortLink, abortController);
+  containerOpts = { ...containerOpts, signal: abortController.signal };
+
   try {
     log.info({ planMode, planModel, executeModel }, 'Handing off to container backend — starting worker container');
     const startTime = Date.now();
@@ -125,6 +133,10 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
 
     log.info({ durationMin: Math.round(durationMs / 60_000) }, 'New task completed successfully');
   } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      log.info('new-task container killed by incoming feedback — suppressing failure comment');
+      return;
+    }
     if (cancelledCards.has(cardShortLink)) {
       cancelledCards.delete(cardShortLink);
       log.info('new-task errored but card was cancelled — suppressing');
@@ -132,6 +144,10 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
     }
     log.error({ err }, 'new-task job failed');
     throw err;
+  } finally {
+    if (activeNewTaskJobs.get(cardShortLink) === abortController) {
+      activeNewTaskJobs.delete(cardShortLink);
+    }
   }
 }
 
@@ -150,6 +166,13 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
   if (!isForAgent) {
     log.info({ commenter: commenterName }, 'Guard determined comment is not for the agent — skipping');
     return;
+  }
+
+  // Kill any in-flight new-task container — feedback supersedes the original task.
+  const runningNewTask = activeNewTaskJobs.get(cardShortLink);
+  if (runningNewTask) {
+    log.info('Aborting in-flight new-task container — feedback comment takes over');
+    runningNewTask.abort();
   }
 
   // Abort any in-flight feedback job for this card — the newest comment supersedes it.
