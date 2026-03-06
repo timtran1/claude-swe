@@ -115,8 +115,24 @@ if (!parsed.success) {
 
 export const config = parsed.data;
 
+// Deep copy of original boards before any resolution — used to retry failed resolutions.
+const originalBoards = JSON.parse(JSON.stringify(config.trello.boards)) as typeof config.trello.boards;
+
 export function getBoardConfig(boardId: string): BoardConfig | undefined {
   return config.trello.boards.find((b) => b.id === boardId) as BoardConfig | undefined;
+}
+
+// Retry name resolution for any boards/lists that still have names but no IDs.
+// Safe to call on every webhook — exits immediately if everything is already resolved.
+export async function ensureNamesResolved(): Promise<void> {
+  const needsRetry = originalBoards.some((orig) => {
+    const current = config.trello.boards.find((b) => b.name === orig.name || b.id === orig.id);
+    return !current || !current.id;
+  });
+  if (!needsRetry) return;
+  // Reset to original config and re-run full resolution
+  config.trello.boards.splice(0, config.trello.boards.length, ...JSON.parse(JSON.stringify(originalBoards)));
+  await resolveNames();
 }
 
 // Resolve board/list names to IDs at startup using the Trello API.

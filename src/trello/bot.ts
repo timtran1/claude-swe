@@ -4,6 +4,7 @@ import { logger } from '../logger.js';
 export let botMemberId: string | null = null;
 
 export async function initBotMemberId(): Promise<void> {
+  if (botMemberId) return;
   const { apiKey, token, botUsername } = config.trello;
   if (!apiKey || !token || !botUsername) return;
   try {

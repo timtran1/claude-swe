@@ -44,11 +44,12 @@ export function buildPlanPrompt(opts: NewTaskPromptOptions, additionalPrompt?: s
 
   const imageSection = imageDir
     ? `
-## Visual References
+## Card Attachments
 
-Screenshots and mockups from the Trello card have been saved to ${imageDir}/.
-Check this directory after reading the card — if it contains images, study them carefully
-as they are the visual specification for this task. Document what you observe in the plan.
+All attachments from the Trello card have been downloaded to ${imageDir}/.
+Check this directory after reading the card:
+- **Images** (screenshots, mockups): study them carefully as they are the visual specification for this task. Document what you observe in the plan.
+- **Documents** (.md, .txt, .pdf, etc.): read them — they may contain conventions, specs, or requirements relevant to the task.
 `
     : '';
 
@@ -125,10 +126,11 @@ export function buildExecutePrompt(opts: NewTaskPromptOptions, additionalPrompt?
 
   const imageSection = imageDir
     ? `
-## Visual References
+## Card Attachments
 
-Reference images from the Trello card are in ${imageDir}/. Study them before implementing
-any UI changes — they are the visual specification.
+All attachments from the Trello card are in ${imageDir}/.
+- **Images**: study them before implementing any UI changes — they are the visual specification.
+- **Documents** (.md, .txt, .pdf, etc.): read them — they may contain conventions, specs, or requirements.
 `
     : '';
 
@@ -194,10 +196,11 @@ export function buildNewTaskPrompt(opts: NewTaskPromptOptions, additionalPrompt?
 
   const imageSection = imageDir
     ? `
-## Visual References
+## Card Attachments
 
-Screenshots and mockups from the Trello card have been saved to ${imageDir}/.
-Study them carefully before writing any code — they are the visual specification for this task.
+All attachments from the Trello card have been downloaded to ${imageDir}/.
+- **Images** (screenshots, mockups): study them carefully before writing any code — they are the visual specification for this task.
+- **Documents** (.md, .txt, .pdf, etc.): read them — they may contain conventions, specs, or requirements relevant to the task.
 `
     : '';
 
@@ -291,9 +294,11 @@ export function buildFeedbackPrompt(opts: FeedbackPromptOptions, additionalPromp
 
   const imageSection = imageDir
     ? `
-## Visual References
+## Card Attachments
 
-Reference images from the Trello card have been saved to ${imageDir}/.
+All attachments from the Trello card have been downloaded to ${imageDir}/.
+- **Images**: visual specifications and reference screenshots.
+- **Documents** (.md, .txt, .pdf, etc.): conventions, specs, or requirements — read them.
 
 Images attached in comments are organized by comment ID:
   /workspace/.comment-images/<comment-id>/<filename>

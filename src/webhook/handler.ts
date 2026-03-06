@@ -1,11 +1,11 @@
 import crypto from 'crypto';
 import { writeFileSync } from 'fs';
 import type { Request, Response } from 'express';
-import { config, getBoardConfig } from '../config.js';
+import { config, getBoardConfig, ensureNamesResolved } from '../config.js';
 import { logger } from '../logger.js';
 import { taskQueue } from '../queue/queue.js';
 import { fetchCard, fetchCardMembers } from '../trello/api.js';
-import { botMemberId } from '../trello/bot.js';
+import { botMemberId, initBotMemberId } from '../trello/bot.js';
 import type {
   TrelloWebhookPayload,
   GitHubPRWebhookPayload,
@@ -86,6 +86,9 @@ export function handleTrelloWebhook(req: Request, res: Response): void {
 }
 
 async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promise<void> {
+  // Lazily retry startup resolutions that may have failed due to transient DNS errors.
+  await Promise.all([initBotMemberId(), ensureNamesResolved()]);
+
   const { type, data, memberCreator } = action;
 
   if (type === 'addMemberToCard') {

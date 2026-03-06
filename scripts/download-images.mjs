@@ -1,10 +1,10 @@
 /**
- * CLI script: download image attachments (and inline description images) from a Trello card.
+ * CLI script: download all attachments (and inline description images) from a Trello card.
  * Usage: node download-images.mjs <cardId> <destDir>
  *
  * Reads TRELLO_API_KEY and TRELLO_TOKEN from environment.
  * Saves files to <destDir>; creates the directory if it doesn't exist.
- * Silently skips images that fail to download so one bad attachment
+ * Silently skips attachments that fail to download so one bad attachment
  * doesn't abort the whole job.
  */
 
@@ -15,17 +15,6 @@ const API_KEY = process.env.TRELLO_API_KEY;
 const TOKEN = process.env.TRELLO_TOKEN;
 const BASE = 'https://api.trello.com/1';
 
-const IMAGE_MIME_TYPES = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/jpg',
-  'image/gif',
-  'image/webp',
-]);
-
-const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
-
-const MAX_IMAGES = 20;
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 function authParams() {
@@ -38,15 +27,6 @@ async function trelloFetch(path) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Trello ${res.status}: ${await res.text()}`);
   return res.json();
-}
-
-function extFromMime(mimeType) {
-  switch (mimeType) {
-    case 'image/png':  return '.png';
-    case 'image/gif':  return '.gif';
-    case 'image/webp': return '.webp';
-    default:           return '.jpg';
-  }
 }
 
 function sanitizeFilename(name) {
@@ -86,20 +66,29 @@ async function downloadFile(url, destPath) {
   }
 }
 
-/** Parse inline image URLs from a Trello card description or comment text. */
-function extractInlineImageUrls(text) {
+/** Parse inline file URLs from a Trello card description or comment text. */
+function extractInlineUrls(text) {
   const urls = [];
 
+  // Markdown image links: ![alt](url)
   for (const m of text.matchAll(/!\[.*?\]\((https?:\/\/[^)]+)\)/g)) {
     urls.push(m[1]);
   }
 
+  // Markdown regular links: [text](url) — capture Trello download URLs
+  for (const m of text.matchAll(/\[.*?\]\((https?:\/\/trello\.com\/1\/cards\/[^)]+\/download\/[^)]+)\)/g)) {
+    urls.push(m[1]);
+  }
+
+  // Bare Trello URLs with file extensions
   for (const m of text.matchAll(/https?:\/\/trello\.com\/\S+/g)) {
     const url = m[0].replace(/[)>.,]+$/, '');
-    const ext = path.extname(new URL(url).pathname).toLowerCase();
-    if (IMAGE_EXTENSIONS.has(ext)) {
-      urls.push(url);
-    }
+    try {
+      const ext = path.extname(new URL(url).pathname).toLowerCase();
+      if (ext) {
+        urls.push(url);
+      }
+    } catch { /* ignore malformed URLs */ }
   }
 
   return [...new Set(urls)];
@@ -113,7 +102,7 @@ async function downloadCommentImages(cardId, commentImagesDir) {
   for (const action of actions) {
     const commentId = action.id;
     const text = action.data?.text ?? '';
-    const urls = extractInlineImageUrls(text);
+    const urls = extractInlineUrls(text);
 
     if (urls.length === 0) continue;
 
@@ -122,12 +111,8 @@ async function downloadCommentImages(cardId, commentImagesDir) {
 
     let downloaded = 0;
     for (const url of urls) {
-      if (downloaded >= MAX_IMAGES) break;
-      const ext = path.extname(new URL(url).pathname).toLowerCase();
-      const safeExt = IMAGE_EXTENSIONS.has(ext) ? ext : '.jpg';
-      // Use last path segment as filename (e.g. image.webp), falling back to index
       const rawName = path.basename(new URL(url).pathname);
-      const filename = sanitizeFilename(rawName) || `image-${downloaded + 1}${safeExt}`;
+      const filename = sanitizeFilename(rawName) || `file-${downloaded + 1}`;
       const destPath = path.join(commentDir, filename);
 
       const ok = await downloadFile(url, destPath);
@@ -181,18 +166,7 @@ async function main() {
 
   console.log(`Found ${attachments.length} attachment(s) on card`);
   for (const att of attachments) {
-    if (downloaded >= MAX_IMAGES) break;
-
-    const isImageMime = IMAGE_MIME_TYPES.has(att.mimeType);
-    const ext = path.extname(att.name).toLowerCase();
-    const isImageExt = IMAGE_EXTENSIONS.has(ext);
-
-    if (!isImageMime && !isImageExt) {
-      console.log(`  Skipping "${att.name}": not an image (mime=${att.mimeType || 'none'}, ext=${ext || 'none'})`);
-      continue;
-    }
-
-    const filename = sanitizeFilename(att.name) || `attachment-${downloaded + 1}${extFromMime(att.mimeType)}`;
+    const filename = sanitizeFilename(att.name) || `attachment-${downloaded + 1}`;
     const destPath = path.join(destDir, filename);
 
     const ok = await downloadFile(att.url, destPath);
@@ -202,25 +176,23 @@ async function main() {
     }
   }
 
-  const descImageUrls = extractInlineImageUrls(card.desc ?? '');
+  const descImageUrls = extractInlineUrls(card.desc ?? '');
   let descIndex = 1;
 
   for (const url of descImageUrls) {
-    if (downloaded >= MAX_IMAGES) break;
-
-    const ext = path.extname(new URL(url).pathname).toLowerCase();
-    const safeExt = IMAGE_EXTENSIONS.has(ext) ? ext : '.jpg';
-    const destPath = path.join(destDir, `desc-image-${descIndex}${safeExt}`);
+    const rawName = path.basename(new URL(url).pathname);
+    const filename = sanitizeFilename(rawName) || `desc-file-${descIndex}`;
+    const destPath = path.join(destDir, filename);
 
     const ok = await downloadFile(url, destPath);
     if (ok) {
-      console.log(`Downloaded description image: desc-image-${descIndex}${safeExt}`);
+      console.log(`Downloaded description file: ${filename}`);
       downloaded++;
       descIndex++;
     }
   }
 
-  console.log(`Done. Downloaded ${downloaded} image(s) to ${destDir}`);
+  console.log(`Done. Downloaded ${downloaded} file(s) to ${destDir}`);
 }
 
 main().catch((err) => {
