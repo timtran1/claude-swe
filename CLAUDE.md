@@ -15,6 +15,7 @@ The main process (`src/index.ts`) is a thin webhook server + BullMQ job processo
    - `addMemberToCard` (bot assigned) → enqueues `new-task` job
    - `removeMemberFromCard` (bot removed) → enqueues `cancel` job
    - `commentCard` (human comment) → Haiku guard (`src/agent/guard.ts`) filters non-agent comments → enqueues `feedback` job
+   - `updateCard` (card archived, i.e. `closed=true`) → enqueues `cleanup` job with `reason: 'archived'`
 2. GitHub webhook (`POST /webhooks/github`) → verifies HMAC-SHA256; on `pull_request closed` for `claude/*` branches → enqueues `cleanup` job
 3. BullMQ worker (`src/queue/worker.ts`) dequeues jobs and calls `containers/manager.ts`
 
@@ -58,7 +59,7 @@ When a task starts, a UUID-token log session is created (`src/logs/store.ts`) an
 
 - `new-task` — new card assigned to bot; 3 attempts with exponential backoff
 - `feedback` — human comment on card; passes Haiku guard first (non-agent comments skipped); if a feedback container is already running for that card, it is killed immediately and the new comment takes over — always works on the latest feedback
-- `cleanup` — PR closed; destroy container + volume
+- `cleanup` — PR closed/merged or card archived; destroy container + volume (for `reason: 'archived'`, also drains pending jobs immediately without checking open PRs)
 - `cancel` — bot removed from card mid-flight; drain pending jobs, kill container, post comment
 
 Branch naming: all Claude branches are `claude/<cardShortLink>`.

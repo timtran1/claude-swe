@@ -249,24 +249,41 @@ async function handleCleanup(job: Job<CleanupJob>): Promise<void> {
   const { cardShortLink, prUrl, reason, repoFullName } = job.data;
   const log = logger.child({ phase: 'cleanup', jobId: job.id, cardShortLink });
 
-  log.info({ prUrl, reason, repoFullName }, 'Picked up cleanup job — checking for remaining open PRs');
+  log.info({ prUrl, reason, repoFullName }, 'Picked up cleanup job');
 
-  const branch = `claude/${cardShortLink}`;
-  const repoSlugs = getAllRepoSlugs();
-
-  if (repoSlugs.length > 0) {
+  if (reason === 'archived') {
+    // Card was archived — stop everything immediately without checking open PRs
+    cancelledCards.add(cardShortLink);
     try {
-      const openPRs = await findOpenPRsForBranch(branch, repoSlugs);
-      if (openPRs.length > 0) {
-        log.info({ openPRs }, 'Skipping cleanup — other PRs still open on this branch');
-        return;
+      const pending = await taskQueue.getJobs(['waiting', 'delayed', 'prioritized']);
+      for (const j of pending) {
+        const d = j.data as { cardShortLink?: string };
+        if (d.cardShortLink === cardShortLink && (j.name === 'new-task' || j.name === 'feedback')) {
+          await j.remove();
+          log.info({ jobId: j.id, jobName: j.name }, 'Removed queued job for archived card');
+        }
       }
     } catch (err) {
-      log.warn({ err }, 'Failed to check for open PRs — proceeding with cleanup as safety fallback');
+      log.warn({ err }, 'Failed to drain queued jobs — continuing with cleanup');
+    }
+  } else {
+    // PR closed/merged — skip cleanup if other PRs are still open on this branch
+    const branch = `claude/${cardShortLink}`;
+    const repoSlugs = getAllRepoSlugs();
+    if (repoSlugs.length > 0) {
+      try {
+        const openPRs = await findOpenPRsForBranch(branch, repoSlugs);
+        if (openPRs.length > 0) {
+          log.info({ openPRs }, 'Skipping cleanup — other PRs still open on this branch');
+          return;
+        }
+      } catch (err) {
+        log.warn({ err }, 'Failed to check for open PRs — proceeding with cleanup as safety fallback');
+      }
     }
   }
 
-  log.info({ prUrl, reason }, 'No remaining open PRs — destroying container and volume');
+  log.info({ prUrl, reason }, 'Destroying container and volume');
   await destroyTaskContainer(cardShortLink);
   await removeLogSessionByCard(cardShortLink);
   log.info({ prUrl, reason }, 'Cleanup complete — container and volume destroyed');

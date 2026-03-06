@@ -286,6 +286,44 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
     return;
   }
 
+  if (type === 'updateCard') {
+    const card = data.card;
+    const board = data.board;
+
+    if (!card || !board) {
+      logger.info({ phase: 'webhook', actionType: type }, 'updateCard missing card or board — ignoring');
+      return;
+    }
+
+    // Only handle archival: card.closed changed from false to true
+    if (card.closed !== true || data.old?.closed !== false) {
+      logger.info({ phase: 'webhook', cardId: card.id }, 'updateCard is not an archival — ignoring');
+      return;
+    }
+
+    const boardConfig = getBoardConfig(board.id);
+    if (!boardConfig) {
+      logger.info({ phase: 'webhook', boardId: board.id }, 'Board not configured — ignoring updateCard archival');
+      return;
+    }
+
+    let shortLink = card.shortLink;
+    if (!shortLink) {
+      try {
+        const fullCard = await fetchCard(card.id);
+        shortLink = fullCard.shortLink;
+      } catch (err) {
+        logger.warn({ err, phase: 'webhook', cardId: card.id }, 'Failed to fetch card shortLink for archival cleanup — ignoring');
+        return;
+      }
+    }
+
+    const job: CleanupJob = { cardShortLink: shortLink, reason: 'archived' };
+    await taskQueue.add('cleanup', job);
+    logger.info({ phase: 'webhook', cardId: card.id, cardShortLink: shortLink }, 'Enqueued cleanup job — card was archived');
+    return;
+  }
+
   logger.info({ phase: 'webhook', actionType: type }, 'Unhandled Trello action type — ignoring');
 }
 

@@ -25,7 +25,7 @@ export interface TrelloList {
 }
 
 // Action types we care about
-export type TrelloActionType = 'addMemberToCard' | 'removeMemberFromCard' | 'commentCard';
+export type TrelloActionType = 'addMemberToCard' | 'removeMemberFromCard' | 'commentCard' | 'updateCard';
 
 export interface TrelloWebhookAction {
   id: string;
@@ -33,12 +33,13 @@ export interface TrelloWebhookAction {
   date: string;
   memberCreator: TrelloMember;
   data: {
-    card?: TrelloCard;
+    card?: TrelloCard & { closed?: boolean };
     board?: TrelloBoard;
     list?: TrelloList;
     text?: string; // for commentCard
     member?: TrelloMember; // for addMemberToCard (partial: only id + name, no username)
     idMember?: string; // raw member ID for addMemberToCard
+    old?: { closed?: boolean }; // for updateCard — previous field values
   };
 }
 
@@ -75,7 +76,7 @@ export interface FeedbackJob {
 export interface CleanupJob {
   cardShortLink: string;
   prUrl?: string;
-  reason: 'merged' | 'closed';
+  reason: 'merged' | 'closed' | 'archived';
   repoFullName?: string; // e.g. "owner/repo" — the repo whose PR was just closed
 }
 
