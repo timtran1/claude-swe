@@ -69,6 +69,10 @@ export async function fetchCardMembers(cardId: string): Promise<string[]> {
   return members.map((m) => m.id);
 }
 
+export async function archiveCard(cardId: string): Promise<void> {
+  await trelloFetch(`/cards/${cardId}?closed=true`, { method: 'PUT' });
+}
+
 export async function fetchMyBoards(): Promise<TrelloBoard[]> {
   return trelloFetch<TrelloBoard[]>('/members/me/boards?fields=id,name');
 }

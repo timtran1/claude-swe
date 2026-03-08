@@ -14,7 +14,7 @@ The main process (`src/index.ts`) is a thin webhook server + BullMQ job processo
 1. Trello webhook (`POST /webhooks/trello`) → `src/webhook/handler.ts` verifies HMAC-SHA1 signature and routes by action type:
    - `addMemberToCard` (bot assigned) → enqueues `new-task` job
    - `removeMemberFromCard` (bot removed) → enqueues `cancel` job
-   - `commentCard` (human comment) → Haiku guard (`src/agent/guard.ts`) filters non-agent comments → enqueues `feedback` job
+   - `commentCard` (human comment) → Haiku guard (`src/agent/guard.ts`) classifies comment → operational commands executed inline, feedback enqueues `feedback` job, chatter ignored
    - `updateCard` (card archived, i.e. `closed=true`) → enqueues `cleanup` job with `reason: 'archived'`
 2. GitHub webhook (`POST /webhooks/github`) → verifies HMAC-SHA256; on `pull_request closed` for `claude/*` branches → enqueues `cleanup` job
 3. BullMQ worker (`src/queue/worker.ts`) dequeues jobs and calls `containers/manager.ts`
@@ -47,7 +47,9 @@ Key config fields: `agent.planMode` (two-phase vs single-phase), `agent.models.{
 - `buildNewTaskPrompt` — single-phase (plan + execute in one pass)
 - `buildFeedbackPrompt` — handle reviewer comment on existing PR branch
 
-`src/agent/guard.ts` — Haiku-based pre-filter for feedback jobs. Before spinning up a container, calls the Anthropic API with the comment text to classify whether it's actually directed at the agent. Human-to-human conversations are silently skipped. Fails open (processes feedback) on API error.
+`src/agent/guard.ts` — Haiku-based classifier for feedback jobs. Before spinning up a container, calls the Anthropic API with the comment text and classifies it into three categories: `ignore` (human-to-human chatter, silently skipped), `feedback` (directed at the agent → spin up container), or `operation` (administrative command → execute inline). Fails open (processes as feedback) on API error.
+
+`src/agent/operations.ts` — Executes operational commands detected by the guard without spinning up a container. Supported operations: `stop` (kill worker + clean up), `move` (move card to named list), `restart` (stop + re-enqueue as fresh new-task), `archive` (archive card, triggering cleanup webhook).
 
 Custom instructions from `config.json` are appended to each prompt type via `agent.prompts.*`.
 

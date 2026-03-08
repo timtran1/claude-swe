@@ -36,7 +36,7 @@ Each worker container has:
 2. **Orchestrator** enqueues a `new-task` job
 3. **Worker** clones the repo into a persistent Docker volume, spins up a container
 4. **Claude Code** (inside the container) reads the card via Trello MCP, installs deps via `mise`, codes, tests (including Playwright visual tests), opens a PR, moves card to Done
-5. **Human comments** on the card → another webhook → a Haiku guard call checks whether the comment is directed at the agent (human-to-human chatter is silently skipped) → if a feedback container is already running for that card, it is killed immediately so the latest comment is always processed without delay → orchestrator re-uses the same volume, runs Claude again with the feedback as a follow-up prompt
+5. **Human comments** on the card → another webhook → a Haiku guard call classifies the comment: (a) human-to-human chatter is silently skipped; (b) **operational commands** (`stop`, `move <list>`, `restart`, `archive`) are executed immediately by the orchestrator without spinning up a container; (c) code feedback kills any running container for that card and re-runs Claude with the comment as a follow-up prompt
 6. **PR merged/closed** → GitHub webhook → orchestrator destroys the container and volume
 7. **Card archived** → Trello webhook → orchestrator drains any pending jobs and destroys the container and volume
 
@@ -233,7 +233,8 @@ src/
     api.ts              — Thin Trello client for error comments and card moves
   agent/
     prompt.ts           — Build prompts for Claude Code
-    guard.ts            — Haiku-based pre-filter: skips feedback jobs for non-agent comments
+    guard.ts            — Haiku-based classifier: ignore / feedback / operation (stop, move, restart, archive)
+    operations.ts       — Execute operational commands inline without spinning up a container
 
 mcp/
   trello-server/        — MCP server baked into worker image

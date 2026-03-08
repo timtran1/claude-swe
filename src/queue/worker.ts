@@ -4,10 +4,11 @@ import { taskQueue } from './queue.js';
 import { logger } from '../logger.js';
 import { runTaskInContainer, destroyTaskContainer } from '../containers/manager.js';
 import { buildPlanPrompt, buildExecutePrompt, buildNewTaskPrompt, buildFeedbackPrompt } from '../agent/prompt.js';
-import { shouldProcessFeedback } from '../agent/guard.js';
+import { classifyComment } from '../agent/guard.js';
+import { executeOperation } from '../agent/operations.js';
 import { getBoardRepos, getAllRepoSlugs } from '../workspace/repo.js';
 import { findOpenPRsForBranch } from '../github/pr.js';
-import { postTrelloComment, moveCardToList } from '../trello/api.js';
+import { postTrelloComment, moveCardToList, fetchBoardLists } from '../trello/api.js';
 import { createLogSession, removeLogSessionByCard } from '../logs/store.js';
 import type { NewTaskJob, FeedbackJob, CleanupJob, CancelJob } from '../webhook/types.js';
 
@@ -160,14 +161,30 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
     'Picked up feedback job',
   );
 
-  // Guard: skip if the comment isn't directed at the agent.
-  // This runs BEFORE aborting any existing job — casual human comments must not kill running work.
-  const isForAgent = await shouldProcessFeedback(commentText, commenterName, cardName);
-  if (!isForAgent) {
+  // Fetch board lists for guard (used to offer move targets) — non-fatal if it fails
+  let boardLists: { id: string; name: string }[] = [];
+  try {
+    boardLists = await fetchBoardLists(boardId);
+  } catch (err) {
+    log.warn({ err }, 'Failed to fetch board lists for guard — continuing without list context');
+  }
+
+  // Guard: classify the comment before aborting any existing job.
+  // Casual human comments must not kill running work.
+  const guardResult = await classifyComment(commentText, commenterName, cardName, boardLists);
+
+  if (guardResult.type === 'ignore') {
     log.info({ commenter: commenterName }, 'Guard determined comment is not for the agent — skipping');
     return;
   }
 
+  if (guardResult.type === 'operation') {
+    log.info({ commenter: commenterName, action: guardResult.action, target: guardResult.target }, 'Guard detected operational command — executing inline');
+    await executeOperation(guardResult, job.data, boardLists, { cancelledCards, activeNewTaskJobs, activeFeedbackJobs, taskQueue });
+    return;
+  }
+
+  // type === 'feedback' — kill any in-flight work and spin up a container
   // Kill any in-flight new-task container — feedback supersedes the original task.
   const runningNewTask = activeNewTaskJobs.get(cardShortLink);
   if (runningNewTask) {
