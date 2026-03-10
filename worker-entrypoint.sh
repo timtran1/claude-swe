@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Activate mise so runtime shims work
+# Activate mise so runtime shims will work
 eval "$(/root/.local/bin/mise activate bash)" 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
