@@ -248,6 +248,7 @@ if [ -n "${CLAUDE_PLAN_PROMPT:-}" ]; then
   exit ${PIPESTATUS[0]}
 else
   # Single-phase: execute model only (feedback jobs or planMode=false)
+
   gosu worker env HOME="$WORKER_HOME" claude \
     --output-format stream-json \
     --verbose \
