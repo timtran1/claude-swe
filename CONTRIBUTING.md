@@ -6,7 +6,7 @@ Thank you for your interest in contributing! This document provides guidelines a
 
 1. **Fork and clone the repository**
    ```bash
-   git clone https://github.com/DeepselSystems/claude-swe.git
+   git clone https://github.com/timtran1/claude-swe.git
    cd claude-swe
    ```
 

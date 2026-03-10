@@ -32,7 +32,7 @@
         "done": {
           "list": "Done"
         },
-        "repos": ["https://github.com/DeepselSystems/claude-swe"]
+        "repos": ["https://github.com/timtran1/claude-swe"]
       }
     ]
   },
@@ -63,7 +63,7 @@
   },
   "containers": {
     "backend": "kubernetes",
-    "workerImage": "ghcr.io/deepselsystems/claude-swe-worker:latest",
+    "workerImage": "ghcr.io/timtran1/claude-swe-worker:latest",
     "concurrency": 10,
     "docker": {
       "enableSocketMount": true
