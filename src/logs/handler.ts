@@ -4,7 +4,7 @@ import { renderLogViewer } from './viewer.js';
 import { streamWorkerLogs } from '../containers/manager.js';
 
 export async function handleLogViewer(req: Request, res: Response): Promise<void> {
-  const session = await getLogSession(req.params.token);
+  const session = await getLogSession(req.params.token as string);
   if (!session) {
     res.status(404).send('Log session not found or has expired.');
     return;
@@ -14,7 +14,7 @@ export async function handleLogViewer(req: Request, res: Response): Promise<void
 }
 
 export async function handleLogStream(req: Request, res: Response): Promise<void> {
-  const session = await getLogSession(req.params.token);
+  const session = await getLogSession(req.params.token as string);
   if (!session) {
     res.status(404).end();
     return;
