@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - .github/workflows/worker.yml
       - Dockerfile.worker
       - worker-entrypoint.sh
       - worker-logger.js
@@ -38,7 +39,9 @@ jobs:
           SHA=${GITHUB_SHA::7}
           DATE=$(date -u +%Y%m%d%H%M%S)
           TAG=$DATE-$SHA
-          docker build -f Dockerfile.worker -t $IMAGE:latest -t $IMAGE:$TAG .
+          docker build -f Dockerfile.worker \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            -t $IMAGE:latest -t $IMAGE:$TAG .
           docker push $IMAGE:$TAG
           docker push $IMAGE:latest
           echo "✅ Pushed worker image: $IMAGE:$TAG"
