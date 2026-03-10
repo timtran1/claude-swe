@@ -69,6 +69,12 @@ ${imageSection}
 
 ${buildRepoSection(repos)}
 
+## Available MCP Servers
+
+You have two MCP servers available — use their tools throughout this task:
+- **trello** — read cards, post comments, move cards (\`get_card\`, \`add_comment\`, \`move_card\`, etc.)
+- **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, etc.). Chromium is pre-installed and runs headless.
+
 ## What You Must Do
 
 1. Read the Trello card fully using the trello MCP \`get_card\` tool
@@ -101,15 +107,16 @@ ${buildRepoSection(repos)}
    - **Files to Modify**: For each file, list the specific changes needed
    - **Files to Create**: For each new file, describe its purpose and content
    - **Test Strategy**: Which tests to run, what new tests to write
-   - **Visual Verification**: If this project has a frontend, prepare a visual verification plan:
+   - **Visual Verification** (REQUIRED — skip ONLY for pure backend tasks in repos with zero frontend code):
      a. Find guide on how to run the app locally, through either repo(s) CLAUDE.md, README, or trello card
      b. Describe the steps to run the app locally, including database setup, backend, docker containers, etc.
      c. Include any authentication steps required to access the app, default credentials if available
      d. Specify exactly which pages/components to open in the browser, what interactions to perform, and what the result should look like
-     e. To attach screenshots to Trello, the executor should save to file with \`browser_take_screenshot\` then upload via:
+     e. The executor has a Playwright MCP server with tools like \`browser_navigate\`, \`browser_click\`, \`browser_take_screenshot\`, etc. Write verification steps using these tools.
+     f. Visual evidence is REQUIRED — the executor MUST attach final screenshot(s) to the Trello card as proof after verification passes. To upload, save to file with \`browser_take_screenshot\` then:
         \`curl -s -X POST "https://api.trello.com/1/cards/{cardId}/attachments" -F "key=$TRELLO_API_KEY" -F "token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg;type=image/jpeg" -F "name=screenshot.jpeg"\`
         Do NOT plan for base64 encoding or browser_run_code — base64 bloats the context window and causes timeouts.
-     f. Skip this section only for pure backend tasks or projects with no frontend impact
+     Include this upload step explicitly in the verification plan.
    - **Done Criteria**: Exact conditions that must be true for the task to be complete
 
 ## Critical Rules
@@ -148,6 +155,12 @@ The workspace is already prepared:
 - Runtime and dependencies have been installed
 - A detailed implementation plan is at /workspace/.plan.md
 ${imageSection}
+## Available MCP Servers
+
+You have two MCP servers available — use their tools throughout this task:
+- **trello** — read cards, post comments, move cards (\`get_card\`, \`add_comment\`, \`move_card\`, etc.)
+- **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, \`browser_type\`, \`browser_snapshot\`, etc.). Chromium is pre-installed and runs headless. Use this to verify any frontend changes.
+
 ## Environment
 
 The following runtimes are pre-installed via mise and available immediately (no download needed):
@@ -163,22 +176,22 @@ Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on 
 2. In each repo under /workspace, read \`CLAUDE.md\` in the root if it exists — it contains project-specific instructions for code style, build commands, and conventions
 3. Implement every change described in the plan
 4. Run the test suite as specified in the plan — fix any failures before proceeding
-5. Follow the visual verification plan in /workspace/.plan.md
+5. Visual verification — follow the visual verification plan in /workspace/.plan.md. This is REQUIRED for any task that touches frontend code, UI components, styles, or pages. Skip ONLY if the task is purely backend with zero frontend files changed.
    - Run the project locally as specified in the plan
-   - Use the Playwright MCP server to navigate to the relevant pages
+   - Use the Playwright MCP tools (\`browser_navigate\`, \`browser_take_screenshot\`, etc.) to open the relevant pages
    - Take screenshots and verify the result looks correct
    - If reference images exist in ${imageDir || '/workspace/.card-images'}/, compare against them and iterate until they match
-   - Do NOT commit until the UI looks right — paste a final screenshot into the PR body as evidence
-   - Skip this step only if the task or project is purely backend with zero UI impact.
-   - **To attach a screenshot to Trello:** save it to a file with \`browser_take_screenshot\`,
-     then upload via curl:
-     \`curl -s -X POST "https://api.trello.com/1/cards/{cardId}/attachments" -F "key=$TRELLO_API_KEY" -F "token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg;type=image/jpeg" -F "name=screenshot.jpeg"\`
-     Do NOT use base64 or browser_run_code for screenshots — the base64 string bloats the context window and causes timeouts.
+   - Do NOT commit until the UI looks right
+   - **Visual evidence is REQUIRED**: after verification passes, you MUST attach the final screenshot(s) to the Trello card as proof. Save the screenshot to a file with \`browser_take_screenshot\`, then upload:
+     \`curl -s -X POST "https://api.trello.com/1/cards/${cardId}/attachments" -F "key=$TRELLO_API_KEY" -F "token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg;type=image/jpeg" -F "name=screenshot.jpeg"\`
+     Do NOT use base64 or browser_run_code for screenshots.
 6. Commit all changes with a clear, descriptive message (do this in each repo that has changes)
 7. For each repo with changes, push the branch and open a PR using the gh CLI:
    \`gh pr create --title "<task name>" --body "<summary of changes>"\`
 8. Move the Trello card to the Done list using the trello MCP \`move_card\` tool (card ID: ${cardId}${doneListId ? `, list ID: ${doneListId}` : ''})
-9. Post all PR URLs as a comment on the Trello card using the trello MCP \`add_comment\` tool
+9. Post all PR URLs as a comment on the Trello card using the trello MCP \`add_comment\` tool.
+   If visual verification was performed, you MUST attach the final screenshot(s) to the Trello card as visual evidence using:
+   \`curl -s -X POST "https://api.trello.com/1/cards/${cardId}/attachments" -F "key=$TRELLO_API_KEY" -F "token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg;type=image/jpeg" -F "name=screenshot.jpeg"\`
 
 ## Important Rules
 
@@ -216,6 +229,12 @@ Card ID: ${cardId}
 Use the trello MCP server tools to read the full card details (description, checklists,
 any additional context). The card contains the full specification for what needs to be done.
 ${imageSection}
+## Available MCP Servers
+
+You have two MCP servers available — use their tools throughout this task:
+- **trello** — read cards, post comments, move cards (\`get_card\`, \`add_comment\`, \`move_card\`, etc.)
+- **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, \`browser_type\`, \`browser_snapshot\`, etc.). Chromium is pre-installed and runs headless. Use this to verify any frontend changes.
+
 ## Repository
 
 ${buildRepoSection(repos)}
@@ -246,25 +265,24 @@ ${buildRepoSection(repos)}
    - If installation fails, read the error and fix it (missing system dep, wrong node version, etc.)
 6. Implement the solution described in the card
 7. Run the project's test suite and fix any failures before proceeding
-8. If this task involves any UI or frontend changes, do browser verification:
+8. Visual verification — REQUIRED for any task that touches frontend code, UI components, styles, or pages. Skip ONLY if the task is purely backend with zero frontend files changed:
    a. Start the dev server (e.g. \`npm run dev\`)
-   b. Use the Playwright MCP server to navigate to the relevant pages
+   b. Use the Playwright MCP tools (\`browser_navigate\`, \`browser_click\`, \`browser_take_screenshot\`, etc.) to open the relevant pages
    c. Take screenshots and verify the result looks correct
    d. If reference images exist in ${imageDir || '/workspace/.card-images'}/, compare against them and iterate until they match
    e. Fix, screenshot, compare — keep iterating until the UI is correct
    f. Do NOT move forward until the UI visually matches the expected result
-   g. To attach a screenshot to Trello: save it to a file with \`browser_take_screenshot\`,
-      then upload via curl:
-      \`curl -s -X POST "https://api.trello.com/1/cards/{cardId}/attachments" -F "key=$TRELLO_API_KEY" -F "token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg;type=image/jpeg" -F "name=screenshot.jpeg"\`
-      Do NOT use base64 or browser_run_code for screenshots — the base64 string bloats the context window and causes timeouts.
-   Skip this step only if the task is purely backend with zero UI impact.
+   g. **Visual evidence is REQUIRED**: after verification passes, you MUST attach the final screenshot(s) to the Trello card as proof. Save the screenshot to a file with \`browser_take_screenshot\`, then upload:
+      \`curl -s -X POST "https://api.trello.com/1/cards/${cardId}/attachments" -F "key=$TRELLO_API_KEY" -F "token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg;type=image/jpeg" -F "name=screenshot.jpeg"\`
+      Do NOT use base64 or browser_run_code for screenshots.
 9. Commit all changes with a clear, descriptive message (do this in each repo that has changes)
 10. For each repo with changes, push the branch and open a PR using the gh CLI:
    \`gh pr create --title "<task name>" --body "<summary of changes>"\`
    If this involved UI changes, paste a final Playwright screenshot into the PR body as evidence
 11. Move the Trello card to the Done list using the trello MCP \`move_card\` tool (card ID: ${cardId}${doneListId ? `, list ID: ${doneListId}` : ''})
-12. Post all PR URLs as a comment on the Trello card using the trello MCP \`add_comment\` tool
-   If this involved UI changes, include the final Playwright screenshot inline in the comment body
+12. Post all PR URLs as a comment on the Trello card using the trello MCP \`add_comment\` tool.
+    If visual verification was performed, you MUST attach the final screenshot(s) to the Trello card as visual evidence using:
+    \`curl -s -X POST "https://api.trello.com/1/cards/${cardId}/attachments" -F "key=$TRELLO_API_KEY" -F "token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg;type=image/jpeg" -F "name=screenshot.jpeg"\`
 
 ## Important Rules
 
@@ -320,6 +338,12 @@ Card ID: ${cardId}
 Reviewer: ${commenterName}
 Latest comment: "${commentText}"
 ${imageSection}
+## Available MCP Servers
+
+You have two MCP servers available — use their tools throughout this task:
+- **trello** — read cards, post comments, move cards (\`get_card\`, \`add_comment\`, \`move_card\`, etc.)
+- **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, \`browser_type\`, \`browser_snapshot\`, etc.). Chromium is pre-installed and runs headless. Use this to verify any frontend changes.
+
 ## Environment
 
 The following runtimes are pre-installed via mise and available immediately (no download needed):
@@ -342,22 +366,22 @@ Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on 
 6. Run \`mise install\` if a runtime config file exists, then install project dependencies
 7. Implement the requested changes
 8. Run the test suite and ensure all tests pass
-9. If this task involves any UI or frontend changes, do browser verification:
-   a. Start the dev server and use the Playwright MCP server to navigate to the relevant pages
+9. Visual verification — REQUIRED for any changes that touch frontend code, UI components, styles, or pages. Skip ONLY if changes are purely backend with zero frontend files changed:
+   a. Start the dev server and use the Playwright MCP tools (\`browser_navigate\`, \`browser_click\`, \`browser_take_screenshot\`, etc.) to open the relevant pages
    b. Take screenshots and verify the updated UI looks correct
    c. Check /workspace/.card-images/ for any reference images and compare against them
    d. Iterate until the UI is correct — do NOT commit until it looks right
-   e. To attach a screenshot to Trello: save it to a file with \`browser_take_screenshot\`,
-      then upload via curl:
-      \`curl -s -X POST "https://api.trello.com/1/cards/{cardId}/attachments" -F "key=$TRELLO_API_KEY" -F "token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg;type=image/jpeg" -F "name=screenshot.jpeg"\`
-      Do NOT use base64 or browser_run_code for screenshots — the base64 string bloats the context window and causes timeouts.
-   Skip this step only if the changes are purely backend with zero UI impact.
+   e. **Visual evidence is REQUIRED**: after verification passes, you MUST attach the final screenshot(s) to the Trello card as proof. Save the screenshot to a file with \`browser_take_screenshot\`, then upload:
+      \`curl -s -X POST "https://api.trello.com/1/cards/${cardId}/attachments" -F "key=$TRELLO_API_KEY" -F "token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg;type=image/jpeg" -F "name=screenshot.jpeg"\`
+      Do NOT use base64 or browser_run_code for screenshots.
 10. Commit and push your changes:
     - Check if the branch still exists on the remote: \`git ls-remote --heads origin claude/${cardShortLink}\`
     - If it exists: push to it (the PR should still be open)
     - If it was deleted (previous PR was merged/closed): create the branch fresh and open a new PR with \`gh pr create\`
 11. Post a reply on the Trello card using the trello MCP \`add_comment\` tool (card ID: ${cardId})
-    summarizing what you changed in response to the feedback
+    summarizing what you changed in response to the feedback.
+    If visual verification was performed, you MUST attach the final screenshot(s) to the Trello card as visual evidence using:
+    \`curl -s -X POST "https://api.trello.com/1/cards/${cardId}/attachments" -F "key=$TRELLO_API_KEY" -F "token=$TRELLO_TOKEN" -F "file=@/tmp/screenshot.jpeg;type=image/jpeg" -F "name=screenshot.jpeg"\`
 ${doneListId ? `12. Move the Trello card back to Done using the trello MCP \`move_card\` tool (card ID: ${cardId}, list ID: ${doneListId})` : ''}
 
 ## Important Rules
