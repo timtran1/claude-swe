@@ -11,11 +11,9 @@ import {
   buildSlackNewTaskPrompt,
   buildSlackFeedbackPrompt,
 } from '../agent/prompt.js';
-import { classifyComment } from '../agent/guard.js';
-import { executeOperation } from '../agent/operations.js';
 import { getBoardRepos, getAllRepoSlugs } from '../workspace/repo.js';
 import { findOpenPRsForBranch } from '../github/pr.js';
-import { moveCardToList, fetchBoardLists } from '../trello/api.js';
+import { moveCardToList } from '../trello/api.js';
 import { postStatus } from '../notify.js';
 import { getTaskSource } from '../webhook/types.js';
 import { createLogSession, removeLogSessionByCard } from '../logs/store.js';
@@ -38,6 +36,11 @@ const activeFeedbackJobs = new Map<string, AbortController>();
 // Active new-task jobs keyed by cardShortLink.
 // When a feedback comment passes the guard, the running new-task is killed immediately.
 const activeNewTaskJobs = new Map<string, AbortController>();
+
+/** Expose worker state so webhook/Slack handlers can execute operations inline. */
+export function getWorkerContext() {
+  return { cancelledCards, activeNewTaskJobs, activeFeedbackJobs, taskQueue };
+}
 
 export const worker = new Worker(
   'tasks',
@@ -208,32 +211,8 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
     'Picked up feedback job',
   );
 
-  // Fetch board lists for guard (Trello tasks only; Slack tasks pass empty list)
-  let boardLists: { id: string; name: string }[] = [];
-  if (source.type === 'trello' && boardId) {
-    try {
-      boardLists = await fetchBoardLists(boardId);
-    } catch (err) {
-      log.warn({ err }, 'Failed to fetch board lists for guard — continuing without list context');
-    }
-  }
-
-  // Guard: classify the comment before aborting any existing job.
-  // Casual human comments must not kill running work.
-  const guardResult = await classifyComment(commentText, commenterName, cardName, boardLists);
-
-  if (guardResult.type === 'ignore') {
-    log.info({ commenter: commenterName }, 'Guard determined comment is not for the agent — skipping');
-    return;
-  }
-
-  if (guardResult.type === 'operation') {
-    log.info({ commenter: commenterName, action: guardResult.action, target: guardResult.target }, 'Guard detected operational command — executing inline');
-    await executeOperation(guardResult, job.data, boardLists, { cancelledCards, activeNewTaskJobs, activeFeedbackJobs, taskQueue });
-    return;
-  }
-
-  // type === 'feedback' — kill any in-flight work and spin up a container
+  // Guard ran in the webhook/Slack handler before enqueueing — only genuine feedback reaches here.
+  // Kill any in-flight work and spin up a container.
   const runningNewTask = activeNewTaskJobs.get(cardShortLink);
   if (runningNewTask) {
     log.info('Aborting in-flight new-task container — feedback comment takes over');

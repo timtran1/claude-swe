@@ -4,8 +4,11 @@ import type { Request, Response } from 'express';
 import { config, getBoardConfig, ensureNamesResolved } from '../config.js';
 import { logger } from '../logger.js';
 import { taskQueue } from '../queue/queue.js';
-import { fetchCard, fetchCardMembers } from '../trello/api.js';
+import { fetchCard, fetchCardMembers, fetchBoardLists } from '../trello/api.js';
 import { botMemberId, initBotMemberId } from '../trello/bot.js';
+import { classifyComment } from '../agent/guard.js';
+import { executeOperation } from '../agent/operations.js';
+import { getWorkerContext } from '../queue/worker.js';
 import { getSlackThreadByTask } from '../slack/id.js';
 import { postSlackReply } from '../slack/client.js';
 import type {
@@ -266,7 +269,17 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
       return;
     }
 
-    const job: FeedbackJob = {
+    // Guard: classify the comment before touching the queue.
+    // Ignore/operations are handled inline; only genuine feedback is enqueued.
+    const boardLists = await fetchBoardLists(board.id).catch(() => [] as { id: string; name: string }[]);
+    const guardResult = await classifyComment(commentText, memberCreator.fullName, card.name, boardLists);
+
+    if (guardResult.type === 'ignore') {
+      logger.info({ phase: 'webhook', cardId: card.id, commenter: memberCreator.username }, 'Guard: comment is not for the agent — ignoring');
+      return;
+    }
+
+    const jobData: FeedbackJob = {
       cardId: card.id,
       cardShortLink: card.shortLink,
       cardName: card.name,
@@ -280,13 +293,19 @@ async function routeTrelloAction(action: TrelloWebhookPayload['action']): Promis
       source: { type: 'trello', cardId: card.id },
     };
 
-    await taskQueue.add('feedback', job, {
+    if (guardResult.type === 'operation') {
+      logger.info({ phase: 'webhook', cardId: card.id, commenter: memberCreator.username, action: guardResult.action, target: guardResult.target }, 'Guard: operational command — executing inline');
+      await executeOperation(guardResult, jobData, boardLists, getWorkerContext());
+      return;
+    }
+
+    await taskQueue.add('feedback', jobData, {
       attempts: 1,
     });
 
     logger.info(
       { phase: 'webhook', cardId: card.id, cardShortLink: card.shortLink, commenter: memberCreator.username },
-      'Enqueued feedback job',
+      'Guard: feedback — enqueued feedback job',
     );
     return;
   }

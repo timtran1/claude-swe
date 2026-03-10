@@ -3,6 +3,9 @@ import { logger } from '../logger.js';
 import { config, getBoardConfig } from '../config.js';
 import { taskQueue } from '../queue/queue.js';
 import { fetchCard } from '../trello/api.js';
+import { classifyComment } from '../agent/guard.js';
+import { executeOperation } from '../agent/operations.js';
+import { getWorkerContext } from '../queue/worker.js';
 import { postSlackReply } from './client.js';
 import {
   generateSlackTaskId,
@@ -256,12 +259,15 @@ export function registerSlackHandlers(app: App): void {
       threadTs: parentTs,
     };
 
-    // Collect file metadata from the reply
-    const slackFiles = extractSlackFiles(event as any);
+    // Guard: classify before touching the queue.
+    const guardResult = await classifyComment(taskDescription, event.user ?? 'unknown', taskDescription.slice(0, 80), []);
 
-    // Enqueue as feedback — the worker handles guard classification
-    // (ignore, operation, or feedback) just like the Trello flow
-    const job: FeedbackJob = {
+    if (guardResult.type === 'ignore') {
+      log.info({ taskId }, 'Guard: Slack reply is not for the agent — ignoring');
+      return;
+    }
+
+    const jobData: FeedbackJob = {
       cardShortLink: taskId,
       cardName: taskDescription.slice(0, 80),
       cardDesc: '',
@@ -270,12 +276,23 @@ export function registerSlackHandlers(app: App): void {
       commenterName: event.user ?? 'unknown',
       source,
       repos,
-      slackFiles: slackFiles.length > 0 ? slackFiles : undefined,
     };
 
-    await taskQueue.add('feedback', job, { attempts: 1 });
+    if (guardResult.type === 'operation') {
+      log.info({ taskId, action: guardResult.action, target: guardResult.target }, 'Guard: operational command — executing inline');
+      await executeOperation(guardResult, jobData, [], getWorkerContext());
+      return;
+    }
 
-    log.info({ taskId }, 'Enqueued feedback job from Slack');
+    // Collect file metadata from the reply (only for genuine feedback)
+    const slackFiles = extractSlackFiles(event as any);
+    if (slackFiles.length > 0) {
+      jobData.slackFiles = slackFiles;
+    }
+
+    await taskQueue.add('feedback', jobData, { attempts: 1 });
+
+    log.info({ taskId }, 'Guard: feedback — enqueued feedback job from Slack');
 
     await postSlackReply(event.channel, parentTs, `Got your feedback. Working on it now...`).catch(() => {});
   });
