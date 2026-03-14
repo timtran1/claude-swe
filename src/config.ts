@@ -55,6 +55,23 @@ const agentSchema = z.object({
   }).default({}),
 }).default({});
 
+/** Zod schema for a single Jira project configuration entry */
+const jiraProjectSchema = z.object({
+  /** Jira project key, e.g. "MYPROJ" */
+  key: z.string().min(1),
+  /** Only trigger on issues in these statuses (empty = all statuses) */
+  includeStatuses: z.array(z.string()).default([]),
+  doing: z.object({
+    statusId: z.string().min(1).optional(),
+    status: z.string().min(1).optional(),
+  }).optional(),
+  done: z.object({
+    statusId: z.string().min(1).optional(),
+    status: z.string().min(1).optional(),
+  }).optional(),
+  repos: z.array(z.string().url()).default([]),
+});
+
 const configSchema = z.object({
   agent: agentSchema,
   trello: z.object({
@@ -86,6 +103,29 @@ const configSchema = z.object({
     channels: z.record(z.string(), z.object({
       repos: z.array(z.string().url()).default([]),
     })).default({}),
+  }).default({}),
+  jira: z.object({
+    /** Jira Cloud base URL, e.g. "https://myorg.atlassian.net" */
+    host: z.string().nullable().default(null),
+    /** Bot account email for Basic Auth */
+    email: z.string().nullable().default(null),
+    /** Jira API token (use "env.JIRA_API_TOKEN") */
+    apiToken: z.string().nullable().default(null),
+    /** HMAC secret for webhook signature verification */
+    webhookSecret: z.string().nullable().default(null),
+    /** Jira account ID of the bot user (resolved at startup if not set) */
+    botAccountId: z.string().nullable().default(null),
+    /** Global default: transition issue to this status when work starts (overridden per-project) */
+    doing: z.object({
+      statusId: z.string().min(1).optional(),
+      status: z.string().min(1).optional(),
+    }).nullable().default(null),
+    /** Global default: transition issue to this status when work is done (overridden per-project) */
+    done: z.object({
+      statusId: z.string().min(1).optional(),
+      status: z.string().min(1).optional(),
+    }).nullable().default(null),
+    projects: z.array(jiraProjectSchema).default([]),
   }).default({}),
   containers: z.object({
     backend: z.enum(['docker', 'kubernetes']).default('docker'),
@@ -133,6 +173,13 @@ const originalBoards = JSON.parse(JSON.stringify(config.trello.boards)) as typeo
 
 export function getBoardConfig(boardId: string): BoardConfig | undefined {
   return config.trello.boards.find((b) => b.id === boardId) as BoardConfig | undefined;
+}
+
+export type JiraProjectConfig = z.infer<typeof jiraProjectSchema>;
+
+/** Returns the Jira project config for the given project key, or undefined if not configured. */
+export function getJiraProjectConfig(projectKey: string): JiraProjectConfig | undefined {
+  return config.jira.projects.find((p) => p.key === projectKey);
 }
 
 // Retry name resolution for any boards/lists that still have names but no IDs.
