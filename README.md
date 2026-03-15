@@ -1,6 +1,6 @@
 # Claude SWE Agent
 
-Autonomous development agent: assign the Claude bot user to a Trello card (or mention the bot in Slack) → Claude codes it, tests it, opens a PR, and moves the card to Done. When humans comment on the card or reply in the Slack thread, Claude reads the feedback and updates the PR.
+Autonomous development agent: assign the Claude bot user to a Trello card, mention the bot in Slack, or assign a Jira issue to the bot → Claude codes it, tests it, opens a PR, and moves the task to Done. When humans comment on the card/issue or reply in the Slack thread, Claude reads the feedback and updates the PR.
 
 Each task runs in its own isolated Docker container with persistent storage. The container has `mise` (universal runtime manager) so Claude auto-detects and installs whatever the project needs — Node, Python, Go, Rust, Ruby, etc. When the PR is merged or closed, the container and volume are automatically cleaned up.
 
@@ -12,8 +12,8 @@ Each task runs in its own isolated Docker container with persistent storage. The
 │                                                      │
 │  Trello webhook ─┬─► Task Queue (BullMQ/Redis)       │
 │  GitHub webhook  │        │                          │
-│  Slack (Socket) ─┘        ▼                          │
-│                  Container Manager (docker/k8s)      │
+│  Jira webhook   ─┤        ▼                          │
+│  Slack (Socket) ─┘  Container Manager (docker/k8s)  │
 │                    │           │          │          │
 │                    ▼           ▼          ▼          │
 │               ┌─────────┐ ┌─────────┐ ┌─────────┐   │
@@ -32,11 +32,11 @@ Each worker container has:
 
 ### Lifecycle
 
-1. **Trello webhook** fires when you assign the bot user to a card in a watched list — OR — **Slack** when you `@mention` the bot in a channel
+1. **Trello webhook** fires when you assign the bot user to a card in a watched list — OR — **Jira webhook** when you assign the bot account to an issue — OR — **Slack** when you `@mention` the bot in a channel
 2. **Orchestrator** enqueues a `new-task` job
 3. **Worker** clones the repo into a persistent Docker volume, spins up a container
-4. **Claude Code** (inside the container) reads the task description, installs deps via `mise`, codes, tests (including Playwright visual tests), opens a PR. For Trello tasks: reads card via Trello MCP and moves card to Done.
-5. **Human comments** on the card (or replies in the Slack thread) → a Haiku guard call classifies the comment: (a) human-to-human chatter is silently skipped; (b) **operational commands** (`stop`, `move <list>`, `restart`, `archive`) are executed immediately by the orchestrator without spinning up a container; (c) code feedback kills any running container for that task and re-runs Claude with the comment as a follow-up prompt
+4. **Claude Code** (inside the container) reads the task description, installs deps via `mise`, codes, tests (including Playwright visual tests), opens a PR. For Trello tasks: reads card via Trello MCP and moves card to Done. For Jira tasks: posts a comment with the PR link and transitions the issue to Done.
+5. **Human comments** on the card/issue (or replies in the Slack thread) → a Haiku guard call classifies the comment: (a) human-to-human chatter is silently skipped; (b) **operational commands** (`stop`, `move <status>`, `restart`, `archive`) are executed immediately by the orchestrator without spinning up a container; (c) code feedback kills any running container for that task and re-runs Claude with the comment as a follow-up prompt
 6. **PR merged/closed** → GitHub webhook → orchestrator destroys the container and volume; notifies Slack thread if applicable
 7. **Card archived** → Trello webhook → orchestrator drains any pending jobs and destroys the container and volume
 
@@ -152,6 +152,8 @@ SLACK_SIGNING_SECRET=
 GITHUB_TOKEN=
 GITHUB_WEBHOOK_SECRET=
 ANTHROPIC_API_KEY=
+JIRA_API_TOKEN=
+JIRA_WEBHOOK_SECRET=
 ```
 
 ### 6. Build and run
@@ -186,7 +188,107 @@ In both cases:
 - Secret: same value as `GITHUB_WEBHOOK_SECRET` in `.env`
 - Events: select **Pull requests** only
 
-### 8. Slack app (optional)
+### 8. Jira (optional)
+
+Jira lets you trigger tasks directly from Jira issues. Assign the bot account to an issue → Claude picks it up, codes the solution, and posts the PR link as a comment. You can also comment on the issue to give feedback.
+
+#### Create a Jira bot account
+
+Create a dedicated Atlassian account for Claude (e.g. `claude-bot@yourorg.com`) and add it as a member of the Jira projects you want it to work on.
+
+#### Get an API token
+
+Log in as the **bot account** and go to [id.atlassian.com/manage-profile/security/api-tokens](https://id.atlassian.com/manage-profile/security/api-tokens). Click **Create API token**, give it a name (e.g. `claude-swe`), and copy the token — this is `JIRA_API_TOKEN`. The token is tied to the bot account email.
+
+#### Add to config.json (global bot mode)
+
+In **global bot mode**, the bot responds to any Jira issue assigned to it, across all projects. The target repo must be included in the issue description using a `repo:` line:
+
+```json
+"jira": {
+  "host": "https://yourorg.atlassian.net",
+  "email": "claude-bot@yourorg.com",
+  "apiToken": "env.JIRA_API_TOKEN",
+  "webhookSecret": "env.JIRA_WEBHOOK_SECRET",
+  "doing": { "status": "In Progress" },
+  "done":  { "status": "Done" },
+  "projects": []
+}
+```
+
+| Field | Meaning | How to find |
+|---|---|---|
+| `host` | Your Jira Cloud base URL | Found in browser address bar: `https://<yourorg>.atlassian.net` |
+| `email` | Bot account email address | The email you used to create the bot Atlassian account |
+| `apiToken` | API token for bot authentication | Generated at id.atlassian.com as above — use `"env.JIRA_API_TOKEN"` |
+| `webhookSecret` | Optional HMAC secret to verify webhook payloads | Generate with `openssl rand -hex 32`; must match what you set in Jira → use `"env.JIRA_WEBHOOK_SECRET"` |
+| `doing.status` | Transition name to move the issue to when starting work | Must match a transition name in your Jira workflow exactly |
+| `doing.statusId` | Transition ID (alternative to name — no extra API call) | From `GET /rest/api/3/issue/{issueKey}/transitions` or Jira workflow editor |
+| `done.status` | Transition name to move the issue to when PR is opened | Same workflow as above |
+| `done.statusId` | Transition ID for the Done transition | Same as above |
+| `projects` | Per-project config entries (empty = global mode) | See per-project mode below |
+
+#### Per-project mode (optional)
+
+Add entries to `projects[]` to configure specific repos and custom transitions per Jira project. The bot no longer needs a `repo:` line in the issue description:
+
+```json
+"jira": {
+  "host": "https://yourorg.atlassian.net",
+  "email": "claude-bot@yourorg.com",
+  "apiToken": "env.JIRA_API_TOKEN",
+  "doing": { "status": "In Progress" },
+  "done":  { "status": "Done" },
+  "projects": [
+    {
+      "key": "MYAPP",
+      "repos": ["https://github.com/myorg/my-app"],
+      "includedStatuses": ["To Do", "Backlog"],
+      "doing": { "statusId": "21" },
+      "done":  { "statusId": "31" }
+    }
+  ]
+}
+```
+
+| Per-project field | Meaning |
+|---|---|
+| `key` | Jira project key (e.g. `MYAPP`) — shown in issue keys like `MYAPP-123` |
+| `repos` | GitHub repos to clone for this project |
+| `includedStatuses` | Only trigger tasks when the issue is currently in one of these statuses (empty = any status) |
+| `doing` / `done` | Override the global transition — use `status` (name) or `statusId` (faster, no API call) |
+
+Both modes can coexist: projects with explicit entries use per-project config; all other projects fall through to global mode.
+
+#### Add secrets to .env
+
+```
+JIRA_API_TOKEN=
+JIRA_WEBHOOK_SECRET=
+```
+
+#### Webhook auto-registration
+
+On startup the orchestrator automatically registers a Jira dynamic webhook via `POST /rest/api/3/webhook`. Dynamic webhooks expire after 30 days; the orchestrator refreshes them automatically on each restart when they are within 7 days of expiry.
+
+> **Permission required:** The bot account needs the **Administer Jira** global permission to register system-wide webhooks via the API. If the bot lacks this permission, webhook registration is skipped with a warning and manual setup instructions logged. You can then register the webhook manually:
+> 1. Go to Jira Settings → System → Webhooks → Create webhook
+> 2. URL: `https://your-server.example.com/webhooks/jira`
+> 3. Events: **Issue updated**, **Comment created**, **Issue deleted**
+
+#### Global mode: issue description format
+
+When using global mode (no per-project config), include the target repo in the issue description so the bot can find it:
+
+```
+Implement a dark mode toggle on the settings page.
+
+repo: https://github.com/myorg/my-app
+```
+
+If no repo is found, the bot posts a comment on the issue asking you to add one, then waits for the next edit.
+
+### 9. Slack app (optional)
 
 Slack lets you trigger tasks and give feedback without Trello. You can use Slack alongside Trello (any combination), or Slack-only if you don't have Trello configured.
 
@@ -237,6 +339,31 @@ If a channel has no default repos, the bot will ask for a GitHub URL or Trello c
    - Open a PR, move the card to Done, post the PR link as a comment
 6. Comment on the card to give feedback → Claude reads it and updates the PR
 
+### From Jira
+
+1. Create a Jira issue with a clear title and description
+2. If using **global bot mode**, include the target repo in the description:
+   ```
+   repo: https://github.com/myorg/my-app
+   ```
+   (Per-project mode does not need this — repos are configured in `config.json`)
+3. Optionally attach screenshots or mockup images to the issue
+4. **Assign the issue to the Claude bot account** — this triggers the task
+5. Claude will:
+   - Transition the issue to "In Progress" (if `doing` is configured)
+   - Spin up an isolated container, clone the repo, install dependencies
+   - Code the solution and open a PR
+   - Post a comment on the issue with the PR link
+   - Transition the issue to "Done" (if `done` is configured)
+6. **Comment on the issue** to give feedback → the Haiku guard classifies it:
+   - Human-to-human chatter is silently skipped
+   - Code feedback triggers a new container run with the comment as a follow-up prompt
+   - Operational commands are executed inline:
+     - `stop` — kill the running container
+     - `move In Progress` — transition the issue to another status
+     - `restart` — stop and re-queue as a fresh task
+     - `archive` — transition the issue to Done and stop the worker
+
 ### From Slack
 
 1. Mention the bot in a channel with a task description and optionally a GitHub repo URL:
@@ -258,10 +385,11 @@ If a channel has no default repos, the bot will ask for a GitHub URL or Trello c
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/health` | Status + credential check (`trello`, `github`, `anthropic`, `slack` booleans) |
+| `GET` | `/health` | Status + credential check (`trello`, `github`, `anthropic`, `slack`, `jira` booleans) |
 | `GET` | `/workers` | List active worker containers |
 | `HEAD/POST` | `/webhooks/trello` | Trello webhook receiver |
 | `POST` | `/webhooks/github` | GitHub webhook (PR closed → cleanup) |
+| `POST` | `/webhooks/jira` | Jira webhook (issue assigned/commented/deleted) |
 | `GET` | `/logs/:token` | Live log viewer (HTML) for a running worker |
 | `GET` | `/logs/:token/stream` | SSE stream of worker container stdout/stderr |
 
@@ -283,6 +411,7 @@ src/
   notify.ts             — Status dispatcher: routes postStatus() to Trello or Slack (or both)
   webhook/
     handler.ts          — Trello + GitHub webhook verification, board/list filtering, routing
+    jira-handler.ts     — Jira webhook HMAC verification, event routing (assign / comment / delete)
     types.ts            — Payload and job types; TaskSource discriminated union; getTaskSource()
   queue/
     queue.ts            — BullMQ queue definition
@@ -302,9 +431,19 @@ src/
     id.ts               — Slack task ID generation (s-<8 base36>) + Redis thread mapping
     files.ts            — Download Slack file attachments for worker containers
   agent/
-    prompt.ts           — Build prompts for Claude Code (Trello + Slack variants)
+    prompt.ts           — Build prompts for Claude Code (Trello, Slack, and Jira variants)
     guard.ts            — Haiku-based classifier: ignore / feedback / operation (stop, move, restart, archive)
     operations.ts       — Execute operational commands inline without spinning up a container
+  jira/
+    api.ts              — Jira REST API v3 client (comments, transitions, attachments, projects)
+    adf.ts              — ADF (Atlassian Document Format) parser: extract text and image URLs
+    bot.ts              — Bot identity resolver (initJiraBotAccountId, getBotAccountId)
+    config.ts           — resolveJiraConfig(): hybrid config resolution + repo extraction from description
+    connection.ts       — Startup connectivity check (logs projects the bot has access to)
+    webhooks.ts         — Dynamic webhook registration and auto-refresh on startup
+
+scripts/
+  download-jira-images.mjs — Downloaded into worker container; fetches Jira attachments + embedded images
 
 mcp/
   trello-server/        — MCP server baked into worker image
@@ -338,6 +477,20 @@ mcp/
 | `slack.appToken` | Slack app-level token (`xapp-...`) for Socket Mode — use `"env.SLACK_APP_TOKEN"` |
 | `slack.signingSecret` | Slack signing secret (optional, for request verification) — use `"env.SLACK_SIGNING_SECRET"` |
 | `slack.channels` | Map of Slack channel ID → `{ repos: string[] }` for per-channel default repos |
+| `jira.host` | Jira Cloud base URL (e.g. `https://yourorg.atlassian.net`) |
+| `jira.email` | Bot account email address |
+| `jira.apiToken` | API token for bot account — use `"env.JIRA_API_TOKEN"` |
+| `jira.webhookSecret` | Optional HMAC-SHA256 secret to verify webhook payload authenticity — use `"env.JIRA_WEBHOOK_SECRET"` |
+| `jira.doing.status` | Transition name to move issues to when starting work (matched case-insensitively via API) |
+| `jira.doing.statusId` | Transition ID for the Doing transition (preferred — no extra API call at event time) |
+| `jira.done.status` | Transition name to move issues to when PR is opened |
+| `jira.done.statusId` | Transition ID for the Done transition |
+| `jira.projects` | Array of per-project overrides (empty = global bot mode, watches all projects) |
+| `jira.projects[].key` | Jira project key (e.g. `MYAPP`) |
+| `jira.projects[].repos` | GitHub repo URLs for this project |
+| `jira.projects[].includedStatuses` | Only trigger on issues currently in these statuses (empty = any status) |
+| `jira.projects[].doing` | Per-project Doing transition override (`status` or `statusId`) |
+| `jira.projects[].done` | Per-project Done transition override (`status` or `statusId`) |
 | `github.token` | GitHub PAT (`repo` + `workflow` scopes, or fine-grained with Contents/PRs/Workflows write) — use `"env.GITHUB_TOKEN"` |
 | `github.webhookSecret` | GitHub webhook secret — use `"env.GITHUB_WEBHOOK_SECRET"` |
 | `anthropic.apiKey` | Anthropic API key — use `"env.ANTHROPIC_API_KEY"` |
@@ -363,3 +516,5 @@ mcp/
 | `GITHUB_TOKEN` | GitHub PAT |
 | `GITHUB_WEBHOOK_SECRET` | GitHub webhook secret |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
+| `JIRA_API_TOKEN` | Jira API token (generated from bot account at id.atlassian.com) |
+| `JIRA_WEBHOOK_SECRET` | Optional secret to verify Jira webhook signatures (generate with `openssl rand -hex 32`) |

@@ -80,6 +80,7 @@ WORKDIR /workspace
 # The orchestrator sends the prompt via env var CLAUDE_PROMPT.
 # The entrypoint: set up MCP config, then run claude.
 COPY scripts/download-images.mjs /opt/mcp/download-images.mjs
+COPY scripts/download-jira-images.mjs /opt/mcp/download-jira-images.mjs
 COPY worker-logger.js /opt/mcp/worker-logger.js
 COPY worker-entrypoint.sh /usr/local/bin/worker-entrypoint.sh
 RUN chmod +x /usr/local/bin/worker-entrypoint.sh

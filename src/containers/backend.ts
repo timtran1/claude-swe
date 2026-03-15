@@ -1,6 +1,6 @@
 export interface RunTaskOptions {
   cardShortLink: string;
-  /** Full Trello card ID, used by the worker container to download card images */
+  /** Platform task ID — Trello card ID for image downloads, empty string for Jira/Slack tasks */
   cardId: string;
   branchName: string;
   /** Single-phase prompt (used for feedback jobs) */

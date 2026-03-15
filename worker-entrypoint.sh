@@ -92,6 +92,8 @@ MCPEOF
 fi
 chown worker:worker "${WORKER_HOME}/.claude.json"
 echo "MCP config written to ${WORKER_HOME}/.claude.json"
+# Note: No Jira MCP server in v1 — issue details are embedded in prompts.
+# A future version may add a Jira MCP server here when one becomes available.
 
 # ---------------------------------------------------------------------------
 # Feedback fast-path: if the orchestrator wrote a prompt file to the workspace
@@ -119,6 +121,12 @@ if [ -f /workspace/.feedback-prompt ]; then
   if [ -n "${CARD_ID:-}" ]; then
     node /opt/mcp/download-images.mjs "${CARD_ID}" "$IMAGE_DIR" --comments "$COMMENT_IMAGE_DIR" \
       || echo "Warning: image download failed — continuing"
+  fi
+
+  # Re-download Jira issue attachments so Claude sees any new files added since last run
+  if [ -n "${JIRA_ISSUE_KEY:-}" ]; then
+    node /opt/mcp/download-jira-images.mjs "${JIRA_ISSUE_KEY}" "$IMAGE_DIR" \
+      || echo "Warning: Jira attachment download failed — continuing"
   fi
 
   # Download Slack file attachments if provided (feedback may include new screenshots)
@@ -164,6 +172,12 @@ mkdir -p "$IMAGE_DIR"
 if [ -n "${CARD_ID:-}" ]; then
   node /opt/mcp/download-images.mjs "${CARD_ID}" "$IMAGE_DIR" --comments "$COMMENT_IMAGE_DIR" \
     || echo "Warning: image download failed or no images found — continuing"
+fi
+
+# Download Jira issue attachments when running a Jira task
+if [ -n "${JIRA_ISSUE_KEY:-}" ]; then
+  node /opt/mcp/download-jira-images.mjs "${JIRA_ISSUE_KEY}" "$IMAGE_DIR" \
+    || echo "Warning: Jira attachment download failed — continuing"
 fi
 
 # Download Slack file attachments if provided

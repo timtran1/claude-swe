@@ -50,18 +50,18 @@ export async function classifyComment(
     const response = await client.messages.create({
       model: modelId,
       max_tokens: 50,
-      system: `You are a classifier for comments on a Trello card with an AI coding agent assigned.
+      system: `You are a classifier for comments on a task with an AI coding agent assigned.
 
 Classify the comment into exactly one category and reply with a single line:
 
 IGNORE — Human-to-human conversation the agent should not act on (status updates, chatter, questions between teammates unrelated to the agent's work).
 FEEDBACK — A request, instruction, or feedback directed at the AI coding agent about code or implementation. Spin up a worker container to handle it.
 OP:stop — The user wants to stop, cancel, or kill the running worker.
-OP:move:<list name> — The user wants to move this card to a different list. Use the exact list name from the available lists below.
+OP:move:<status/list name> — The user wants to move this task to a different status or list. Use the exact status/list name from the available options below.
 OP:restart — The user wants to start over, reset, or redo the task from scratch.
-OP:archive — The user wants to archive or close this card.
+OP:archive — The user wants to archive or close this task.
 
-Available lists on this board:
+Available statuses/lists:
 ${listNames}
 
 Reply with exactly one of the above options. No other output.`,
