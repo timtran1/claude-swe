@@ -3,6 +3,7 @@ import type { Logger } from 'pino';
 import { logger } from '../logger.js';
 import { destroyTaskContainer } from '../containers/manager.js';
 import { postTrelloComment, moveCardToList, archiveCard } from '../trello/api.js';
+import { getJiraTransitions, transitionJiraIssue } from '../jira/api.js';
 import { postStatus } from '../notify.js';
 import { getTaskSource } from '../webhook/types.js';
 import type { GuardResult } from './guard.js';
@@ -43,19 +44,31 @@ export async function executeOperation(
       break;
 
     case 'move':
-      if (source.type !== 'trello' || !cardId) {
-        await postStatus(source, '⚠️ The `move` command is only available for Trello-originated tasks.').catch(() => {});
+      if (source.type === 'jira') {
+        await executeJiraMove({ issueKey: source.issueKey, target: result.target, source, log });
+      } else if (source.type !== 'trello' || !cardId) {
+        await postStatus(source, '⚠️ The `move` command is only available for Trello and Jira tasks.').catch(() => {});
       } else {
         await executeMove({ cardId, cardShortLink, target: result.target, boardLists, log });
       }
       break;
 
     case 'restart':
-      await executeRestart({ cardId, cardShortLink, cardName, cardUrl, cardDesc: cardDesc ?? '', boardId, doingListId, doneListId, source, cancelledCards, activeNewTaskJobs, activeFeedbackJobs, taskQueue, log });
+      await executeRestart({ cardId, cardShortLink, cardName, cardUrl, cardDesc: cardDesc ?? '', boardId, doingListId, doneListId, repos: jobData.repos, source, cancelledCards, activeNewTaskJobs, activeFeedbackJobs, taskQueue, log });
       break;
 
     case 'archive':
-      if (source.type !== 'trello' || !cardId) {
+      if (source.type === 'jira') {
+        // Transition to a done/closed status, then stop and clean up
+        const jiraTransitions = await getJiraTransitions(source.issueKey).catch(() => [] as { id: string; name: string }[]);
+        const doneTransition = jiraTransitions.find((t) => /^(done|closed|resolved)$/i.test(t.name));
+        if (doneTransition) {
+          await transitionJiraIssue(source.issueKey, doneTransition.id).catch((err) =>
+            log.warn({ err }, 'Failed to transition Jira issue to Done for archive — continuing with stop'),
+          );
+        }
+        await executeStop({ cardShortLink, source, cancelledCards, activeNewTaskJobs, activeFeedbackJobs, taskQueue, log });
+      } else if (source.type !== 'trello' || !cardId) {
         // For Slack tasks, "archive" means stop + cleanup (no Trello card to archive)
         await executeStop({ cardShortLink, source, cancelledCards, activeNewTaskJobs, activeFeedbackJobs, taskQueue, log });
       } else {
@@ -141,6 +154,36 @@ async function executeMove(opts: {
   );
 }
 
+async function executeJiraMove(opts: {
+  issueKey: string;
+  target: string | undefined;
+  source: ReturnType<typeof getTaskSource>;
+  log: Logger;
+}): Promise<void> {
+  const { issueKey, target, source, log } = opts;
+  const transitions = await getJiraTransitions(issueKey).catch(() => [] as { id: string; name: string }[]);
+
+  if (!target) {
+    await postStatus(source, '⚠️ No status specified. Available transitions:\n' + transitions.map((t) => `- ${t.name}`).join('\n')).catch(() => {});
+    return;
+  }
+
+  const match = transitions.find((t) => t.name.toLowerCase() === target.toLowerCase());
+  if (!match) {
+    const available = transitions.map((t) => `- ${t.name}`).join('\n');
+    await postStatus(source, `⚠️ Transition "${target}" not available. Available transitions:\n${available}`).catch(() => {});
+    log.warn({ target }, 'Jira move target transition not found');
+    return;
+  }
+
+  await transitionJiraIssue(issueKey, match.id);
+  log.info({ target, transitionId: match.id }, 'Jira issue transitioned');
+
+  await postStatus(source, `✅ Transitioned to **${match.name}**.`).catch((err) =>
+    log.warn({ err }, 'Failed to post Jira move confirmation'),
+  );
+}
+
 async function executeRestart(opts: {
   cardId?: string;
   cardShortLink: string;
@@ -150,6 +193,7 @@ async function executeRestart(opts: {
   boardId?: string;
   doingListId?: string;
   doneListId?: string;
+  repos?: string[];
   source: ReturnType<typeof getTaskSource>;
   cancelledCards: Set<string>;
   activeNewTaskJobs: Map<string, AbortController>;
@@ -157,7 +201,7 @@ async function executeRestart(opts: {
   taskQueue: Queue;
   log: Logger;
 }): Promise<void> {
-  const { cardId, cardShortLink, cardName, cardUrl, cardDesc, boardId, doingListId, doneListId, source, cancelledCards, activeNewTaskJobs, activeFeedbackJobs, taskQueue, log } = opts;
+  const { cardId, cardShortLink, cardName, cardUrl, cardDesc, boardId, doingListId, doneListId, repos, source, cancelledCards, activeNewTaskJobs, activeFeedbackJobs, taskQueue, log } = opts;
 
   // Stop everything first (same as stop operation)
   cancelledCards.add(cardShortLink);
@@ -183,8 +227,8 @@ async function executeRestart(opts: {
   // Clear cancelled state so the re-enqueued new-task runs cleanly
   cancelledCards.delete(cardShortLink);
 
-  // Re-enqueue as a fresh new-task
-  const newTaskJob: NewTaskJob = { cardId, cardShortLink, cardName, cardUrl, cardDesc, boardId, doingListId, doneListId, source };
+  // Re-enqueue as a fresh new-task (repos carried for Jira/Slack tasks)
+  const newTaskJob: NewTaskJob = { cardId, cardShortLink, cardName, cardUrl, cardDesc, boardId, doingListId, doneListId, repos, source };
   await taskQueue.add('new-task', newTaskJob, { attempts: 1 });
   log.info('Re-enqueued new-task job for restart');
 
