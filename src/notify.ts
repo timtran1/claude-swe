@@ -1,6 +1,7 @@
 import { logger } from './logger.js';
 import { postTrelloComment } from './trello/api.js';
 import { postSlackReply } from './slack/client.js';
+import { addJiraComment } from './jira/api.js';
 import type { TaskSource } from './webhook/types.js';
 
 /**
@@ -29,5 +30,9 @@ export async function postStatus(source: TaskSource, message: string): Promise<v
     }
   }
 
-  // Jira source is handled in Phase 2 (task 6)
+  if (source.type === 'jira') {
+    await addJiraComment(source.issueKey, message).catch((err) =>
+      logger.warn({ err, issueKey: source.issueKey }, 'Failed to post Jira comment'),
+    );
+  }
 }

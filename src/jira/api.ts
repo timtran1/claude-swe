@@ -138,8 +138,19 @@ export async function fetchJiraIssueAttachments(issueIdOrKey: string): Promise<J
  * Get the currently authenticated Jira user.
  * Used at startup to resolve the bot's account ID when not explicitly configured.
  */
-export async function getJiraCurrentUser(): Promise<{ accountId: string; displayName: string }> {
-  return jiraFetch<{ accountId: string; displayName: string }>('/myself');
+export async function getJiraCurrentUser(): Promise<{ accountId: string; displayName: string; emailAddress: string }> {
+  return jiraFetch<{ accountId: string; displayName: string; emailAddress: string }>('/myself');
+}
+
+/**
+ * List Jira projects accessible to the authenticated user (up to 50, ordered by name).
+ * Uses the paginated /project/search endpoint introduced in Jira Cloud v3.
+ */
+export async function getJiraProjects(): Promise<Array<{ id: string; key: string; name: string }>> {
+  const res = await jiraFetch<{ values: Array<{ id: string; key: string; name: string }> }>(
+    '/project/search?maxResults=50&orderBy=name',
+  );
+  return res.values;
 }
 
 /**

@@ -89,6 +89,9 @@ export interface NewTaskJob {
   taskDescription?: string;
   // Slack file attachments to download inside the worker container
   slackFiles?: SlackFileRef[];
+  // Jira transition IDs resolved at enqueue time (require issue context — cannot defer to worker)
+  jiraDoingTransitionId?: string;
+  jiraDoneTransitionId?: string;
 }
 
 export interface FeedbackJob {
@@ -109,6 +112,9 @@ export interface FeedbackJob {
   repos?: string[];
   // Slack file attachments to download inside the worker container
   slackFiles?: SlackFileRef[];
+  // Jira transition IDs resolved at enqueue time
+  jiraDoingTransitionId?: string;
+  jiraDoneTransitionId?: string;
 }
 
 export interface CleanupJob {

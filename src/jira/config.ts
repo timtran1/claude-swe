@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import type { JiraProjectConfig } from '../config.js';
+import { adfToText } from './adf.js';
 
 /** Effective Jira config resolved for a specific issue — used by webhook handler and worker */
 export interface ResolvedJiraConfig {
@@ -8,26 +9,6 @@ export interface ResolvedJiraConfig {
   done: { statusId?: string; status?: string } | null;
   /** Empty array means all statuses are allowed */
   includeStatuses: string[];
-}
-
-/**
- * Recursively extract plain text from an ADF (Atlassian Document Format) node.
- * ADF is a tree of typed nodes; text content lives in leaf nodes with type "text".
- */
-function adfToText(node: unknown): string {
-  if (!node || typeof node !== 'object') return '';
-  const n = node as Record<string, unknown>;
-
-  if (n['type'] === 'text' && typeof n['text'] === 'string') {
-    return n['text'];
-  }
-
-  const content = n['content'];
-  if (Array.isArray(content)) {
-    return content.map(adfToText).join(' ');
-  }
-
-  return '';
 }
 
 /**
