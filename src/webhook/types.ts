@@ -115,6 +115,8 @@ export interface FeedbackJob {
   // Jira transition IDs resolved at enqueue time
   jiraDoingTransitionId?: string;
   jiraDoneTransitionId?: string;
+  // Full comment history for Jira issues, fetched at enqueue time (plain text, oldest first)
+  jiraAllComments?: string;
 }
 
 export interface CleanupJob {

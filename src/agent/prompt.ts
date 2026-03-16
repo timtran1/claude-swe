@@ -421,6 +421,8 @@ interface JiraFeedbackPromptOptions {
   imageDir?: string;
   jiraHost: string;
   jiraDoneTransitionId?: string;
+  /** Full comment history fetched at enqueue time (plain text, oldest first) */
+  allCommentsText?: string;
 }
 
 /** Curl command to upload a screenshot to a Jira issue as an attachment */
@@ -431,12 +433,27 @@ function jiraUploadScreenshotCmd(issueKey: string): string {
   -F "file=@/tmp/screenshot.jpeg;type=image/jpeg"`;
 }
 
-/** Curl command to post a plain-text comment on a Jira issue using the v3 ADF API */
+/**
+ * Curl command to post a comment on a Jira issue using the v3 ADF API.
+ * messageVar is a placeholder — Claude should construct the full ADF body inline.
+ * For clickable links (e.g. PR URLs), use ADF link marks:
+ *   {"type":"text","text":"<label>","marks":[{"type":"link","attrs":{"href":"<url>"}}]}
+ */
 function jiraPostCommentCmd(issueKey: string, messageVar: string): string {
   return `curl -s -X POST "$JIRA_HOST/rest/api/3/issue/${issueKey}/comment" \\
   -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
   -H "Content-Type: application/json" \\
-  -d '{"body":{"version":1,"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"'"${messageVar}"'"}]}]}}'`;
+  -d '{"body":{"version":1,"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"'"${messageVar}"'"}]}]}}'
+
+# For rich comments with clickable links, construct the ADF body directly. Example with a PR link:
+# curl -s -X POST "$JIRA_HOST/rest/api/3/issue/${issueKey}/comment" \\
+#   -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
+#   -H "Content-Type: application/json" \\
+#   -d '{"body":{"version":1,"type":"doc","content":[{"type":"paragraph","content":[
+#     {"type":"text","text":"PR: "},
+#     {"type":"text","text":"owner/repo#123","marks":[{"type":"link","attrs":{"href":"https://github.com/owner/repo/pull/123"}}]},
+#     {"type":"text","text":" — summary of changes"}
+#   ]}]}}'`;
 }
 
 /** Curl command to transition a Jira issue to a new status */
@@ -713,7 +730,7 @@ ${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}
 }
 
 export function buildJiraFeedbackPrompt(opts: JiraFeedbackPromptOptions, additionalPrompt?: string): string {
-  const { issueKey, issueUrl, issueSummary, commentText, commenterName, imageDir, jiraDoneTransitionId } = opts;
+  const { issueKey, issueUrl, issueSummary, commentText, commenterName, imageDir, jiraDoneTransitionId, allCommentsText } = opts;
 
   const imageSection = imageDir
     ? `
@@ -741,7 +758,10 @@ Jira issue: "${issueSummary}"
 Issue URL: ${issueUrl}
 Issue Key: ${issueKey}
 Reviewer: ${commenterName}
-Latest comment: "${commentText}"
+
+${allCommentsText
+  ? `## Full Comment History\n\n${allCommentsText}\n\n**Latest comment (actionable feedback):** "${commentText}"`
+  : `Latest comment: "${commentText}"`}
 ${imageSection}
 ## Available MCP Servers
 
@@ -756,13 +776,7 @@ ${buildEnvironmentSection()}
 ## Steps to Complete
 
 1. Read /workspace/.plan.md if it exists — it contains the original implementation plan and is essential context
-2. Fetch the full comment history to understand the complete context — the latest comment above may reference earlier discussion:
-   \`\`\`bash
-   curl -s "$JIRA_HOST/rest/api/3/issue/${issueKey}?fields=comment" \\
-     -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
-     -H "Content-Type: application/json"
-   \`\`\`
-   Focus on the most recent comment from ${commenterName} as the actionable feedback.
+2. Review the full comment history above to understand the context, then focus on the latest comment from ${commenterName} as the actionable feedback
 3. Understand what change or fix the reviewer is asking for
 4. In each repo under /workspace, read \`CLAUDE.md\` in the root if it exists — it contains project-specific instructions
 5. Run \`mise install\` if a runtime config file exists, then install project dependencies

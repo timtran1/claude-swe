@@ -39,6 +39,14 @@ async function jiraFetch<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 
+/** A single comment on a Jira issue */
+export interface JiraComment {
+  id: string;
+  body: unknown; // ADF object or plain string on older payloads
+  author: { accountId: string; displayName: string };
+  created: string;
+}
+
 /** File attachment metadata as returned by the Jira issue fields */
 export interface JiraAttachment {
   id: string;
@@ -104,6 +112,16 @@ export async function getJiraTransitions(issueIdOrKey: string): Promise<Array<{ 
     `/issue/${issueIdOrKey}/transitions`,
   );
   return res.transitions;
+}
+
+/**
+ * Fetch all comments for a Jira issue, ordered by creation time (oldest first).
+ */
+export async function fetchJiraIssueComments(issueIdOrKey: string): Promise<JiraComment[]> {
+  const res = await jiraFetch<{ comments: JiraComment[] }>(
+    `/issue/${issueIdOrKey}/comment?orderBy=created`,
+  );
+  return res.comments ?? [];
 }
 
 /**

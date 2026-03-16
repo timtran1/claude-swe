@@ -5,7 +5,7 @@ import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { taskQueue } from '../queue/queue.js';
 import { jiraBotAccountId } from '../jira/bot.js';
-import { addJiraComment, getJiraTransitions } from '../jira/api.js';
+import { addJiraComment, getJiraTransitions, fetchJiraIssueComments } from '../jira/api.js';
 import { adfToPlainText } from '../jira/adf.js';
 import { resolveJiraTransitionId } from '../jira/api.js';
 import { resolveJiraConfig } from '../jira/config.js';
@@ -177,8 +177,11 @@ async function routeJiraEvent(payload: JiraWebhookPayload): Promise<void> {
     const commenterName = comment.author.displayName;
     const cardName = issue.fields.summary;
 
-    // Fetch transitions for the guard's "available lists" parameter (enables OP:move)
-    const transitions = await getJiraTransitions(issueKey).catch(() => [] as { id: string; name: string }[]);
+    // Fetch transitions and full comment history in parallel
+    const [transitions, allCommentsList] = await Promise.all([
+      getJiraTransitions(issueKey).catch(() => [] as { id: string; name: string }[]),
+      fetchJiraIssueComments(issueKey).catch(() => []),
+    ]);
     const guardResult = await classifyComment(
       commentText,
       commenterName,
@@ -195,6 +198,15 @@ async function routeJiraEvent(payload: JiraWebhookPayload): Promise<void> {
     }
 
     const cardUrl = `${config.jira.host ?? ''}/browse/${issueKey}`;
+
+    // Format all comments as plain text for full context in the prompt
+    const jiraAllComments = allCommentsList.length > 0
+      ? allCommentsList.map((c, i) => {
+        const text = typeof c.body === 'string' ? c.body : adfToPlainText(c.body as Parameters<typeof adfToPlainText>[0]);
+        return `[${i + 1}] ${c.author.displayName} (${c.created.slice(0, 10)}): ${text}`;
+      }).join('\n\n')
+      : undefined;
+
     const feedbackJob: FeedbackJob = {
       cardShortLink: issueKey,
       cardName,
@@ -204,6 +216,7 @@ async function routeJiraEvent(payload: JiraWebhookPayload): Promise<void> {
       commenterName,
       repos: resolvedConfig.repos,
       source: { type: 'jira', issueId, issueKey, projectId },
+      jiraAllComments,
     };
 
     if (guardResult.type === 'operation') {

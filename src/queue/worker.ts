@@ -318,6 +318,7 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
       imageDir: '/workspace/.card-images',
       jiraHost: config.jira.host ?? '',
       jiraDoneTransitionId: job.data.jiraDoneTransitionId,
+      allCommentsText: job.data.jiraAllComments,
     }, config.agent.prompts.feedback);
   } else {
     prompt = buildFeedbackPrompt({
