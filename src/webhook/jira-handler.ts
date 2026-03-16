@@ -9,6 +9,7 @@ import { addJiraComment, getJiraTransitions } from '../jira/api.js';
 import { adfToPlainText } from '../jira/adf.js';
 import { resolveJiraTransitionId } from '../jira/api.js';
 import { resolveJiraConfig } from '../jira/config.js';
+import { checkRepoAccess } from '../github/access.js';
 import { classifyComment } from '../agent/guard.js';
 import { executeOperation } from '../agent/operations.js';
 import { getWorkerContext } from '../queue/worker.js';
@@ -280,6 +281,25 @@ async function handleBotAssigned({
       `  repo: https://github.com/your-org/your-repo\n\n` +
       `You can add multiple repos if needed.`,
     ).catch((err) => log.warn({ err }, 'Failed to post "no repo" comment on Jira issue'));
+    return;
+  }
+
+  // Check GitHub token access for each resolved repo before spinning up a container.
+  // If any repo is inaccessible, post a comment explaining why and bail out.
+  const inaccessible = await checkRepoAccess(resolvedConfig.repos);
+  if (inaccessible.length > 0) {
+    log.warn({ inaccessible: inaccessible.map((r) => r.url) }, 'GitHub access check failed — posting comment');
+    const lines: string[] = [
+      `Hi! I was assigned to this issue but cannot access the following ${inaccessible.length === 1 ? 'repository' : 'repositories'}:\n`,
+    ];
+    for (const r of inaccessible) {
+      lines.push(`**${r.url}**`);
+      lines.push(`- ${r.reason}`);
+      lines.push(`- **How to fix:** ${r.fix}\n`);
+    }
+    lines.push('Once access is granted, please re-assign me to this issue and I will pick it up automatically.');
+    await addJiraComment(issueKey, lines.join('\n'))
+      .catch((err) => log.warn({ err }, 'Failed to post access-denied comment on Jira issue'));
     return;
   }
 
