@@ -426,7 +426,7 @@ interface JiraFeedbackPromptOptions {
 /** Curl command to upload a screenshot to a Jira issue as an attachment */
 function jiraUploadScreenshotCmd(issueKey: string): string {
   return `curl -s -X POST "$JIRA_HOST/rest/api/3/issue/${issueKey}/attachments" \\
-  -H "Authorization: Basic $(echo -n $JIRA_EMAIL:$JIRA_API_TOKEN | base64)" \\
+  -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
   -H "X-Atlassian-Token: no-check" \\
   -F "file=@/tmp/screenshot.jpeg;type=image/jpeg"`;
 }
@@ -434,7 +434,7 @@ function jiraUploadScreenshotCmd(issueKey: string): string {
 /** Curl command to post a plain-text comment on a Jira issue using the v3 ADF API */
 function jiraPostCommentCmd(issueKey: string, messageVar: string): string {
   return `curl -s -X POST "$JIRA_HOST/rest/api/3/issue/${issueKey}/comment" \\
-  -H "Authorization: Basic $(echo -n $JIRA_EMAIL:$JIRA_API_TOKEN | base64)" \\
+  -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
   -H "Content-Type: application/json" \\
   -d '{"body":{"version":1,"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"'"${messageVar}"'"}]}]}}'`;
 }
@@ -442,7 +442,7 @@ function jiraPostCommentCmd(issueKey: string, messageVar: string): string {
 /** Curl command to transition a Jira issue to a new status */
 function jiraTransitionCmd(issueKey: string, transitionId: string): string {
   return `curl -s -X POST "$JIRA_HOST/rest/api/3/issue/${issueKey}/transitions" \\
-  -H "Authorization: Basic $(echo -n $JIRA_EMAIL:$JIRA_API_TOKEN | base64)" \\
+  -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
   -H "Content-Type: application/json" \\
   -d '{"transition":{"id":"${transitionId}"}}'`;
 }
@@ -482,11 +482,16 @@ ${buildRepoSection(repos)}
 You have one MCP server available:
 - **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, \`browser_type\`, \`browser_snapshot\`, etc.). Chromium is pre-installed and runs headless.
 
-There is no Jira MCP server — the issue description above is your full task specification.
+There is no Jira MCP server. The issue description above is a snapshot from when this task was assigned — if it seems incomplete, fetch the latest via:
+\`\`\`bash
+curl -s "$JIRA_HOST/rest/api/3/issue/${issueKey}?fields=summary,description,comment" \\
+  -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
+  -H "Content-Type: application/json"
+\`\`\`
 
 ## What You Must Do
 
-1. Review the issue description above carefully — it is the complete specification
+1. Review the issue description above carefully — if anything seems incomplete or ambiguous, fetch the latest issue data via curl before proceeding
 2. Clone the repo(s) into /workspace as described above
 3. In each repo you will modify, create a new branch: \`git checkout -b claude/${issueKey}\`
 4. Run \`mise install\` if a runtime config file exists, then install project dependencies:
@@ -650,9 +655,14 @@ ${imageSection}
 You have one MCP server available:
 - **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, \`browser_type\`, \`browser_snapshot\`, etc.). Chromium is pre-installed and runs headless.
 
-There is no Jira MCP server — the issue description above is your full task specification.
-Use \`curl\` with Basic Auth for any Jira API interactions (comments, attachments, transitions).
+There is no Jira MCP server. Use \`curl\` with Basic Auth for all Jira interactions (comments, attachments, transitions).
 Credentials are available as environment variables: \`$JIRA_HOST\`, \`$JIRA_EMAIL\`, \`$JIRA_API_TOKEN\`.
+The issue description above is a snapshot — if it seems incomplete, fetch the latest via:
+\`\`\`bash
+curl -s "$JIRA_HOST/rest/api/3/issue/${issueKey}?fields=summary,description,comment" \\
+  -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
+  -H "Content-Type: application/json"
+\`\`\`
 
 ## Repository
 
@@ -746,12 +756,19 @@ ${buildEnvironmentSection()}
 ## Steps to Complete
 
 1. Read /workspace/.plan.md if it exists — it contains the original implementation plan and is essential context
-2. Understand what change or fix the reviewer is asking for (the latest comment is shown above)
-3. In each repo under /workspace, read \`CLAUDE.md\` in the root if it exists — it contains project-specific instructions
-4. Run \`mise install\` if a runtime config file exists, then install project dependencies
-5. Implement the requested changes
-6. Run the test suite and ensure all tests pass
-7. Visual verification — REQUIRED for any changes that touch frontend code, UI components, styles, or pages. Skip ONLY if changes are purely backend with zero frontend files changed:
+2. Fetch the full comment history to understand the complete context — the latest comment above may reference earlier discussion:
+   \`\`\`bash
+   curl -s "$JIRA_HOST/rest/api/3/issue/${issueKey}?fields=comment" \\
+     -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
+     -H "Content-Type: application/json"
+   \`\`\`
+   Focus on the most recent comment from ${commenterName} as the actionable feedback.
+3. Understand what change or fix the reviewer is asking for
+4. In each repo under /workspace, read \`CLAUDE.md\` in the root if it exists — it contains project-specific instructions
+5. Run \`mise install\` if a runtime config file exists, then install project dependencies
+6. Implement the requested changes
+7. Run the test suite and ensure all tests pass
+8. Visual verification — REQUIRED for any changes that touch frontend code, UI components, styles, or pages. Skip ONLY if changes are purely backend with zero frontend files changed:
    a. Start the dev server and use the Playwright MCP tools (\`browser_navigate\`, \`browser_click\`, \`browser_take_screenshot\`, etc.) to open the relevant pages
    b. Take screenshots and verify the updated UI looks correct
    c. Check /workspace/.card-images/ for any reference images and compare against them
@@ -761,7 +778,7 @@ ${buildEnvironmentSection()}
       ${jiraUploadScreenshotCmd(issueKey)}
       \`\`\`
       Do NOT use base64 or browser_run_code for screenshots.
-8. Commit and push your changes:
+9. Commit and push your changes:
    - Check if the branch still exists on the remote: \`git ls-remote --heads origin claude/${issueKey}\`
    - If it exists: push to it (the PR should still be open)
    - If it was deleted (previous PR was merged/closed): create the branch fresh and open a new PR with \`gh pr create\`
