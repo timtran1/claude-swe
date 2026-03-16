@@ -486,7 +486,7 @@ Jira issue: "${issueSummary}"
 Issue URL: ${issueUrl}
 Issue Key: ${issueKey}
 
-## Issue Description
+## Issue Description (snapshot — may be stale)
 
 ${issueDescription || '(No description provided)'}
 ${imageSection}
@@ -499,57 +499,77 @@ ${buildRepoSection(repos)}
 You have one MCP server available:
 - **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, \`browser_type\`, \`browser_snapshot\`, etc.). Chromium is pre-installed and runs headless.
 
-There is no Jira MCP server. The issue description above is a snapshot from when this task was assigned — if it seems incomplete, fetch the latest via:
-\`\`\`bash
-curl -s "$JIRA_HOST/rest/api/3/issue/${issueKey}?fields=summary,description,comment" \\
-  -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
-  -H "Content-Type: application/json"
-\`\`\`
+There is no Jira MCP server — use \`curl\` for all Jira API interactions.
+Credentials are in env vars: \`$JIRA_HOST\`, \`$JIRA_EMAIL\`, \`$JIRA_API_TOKEN\`.
 
 ## What You Must Do
 
-1. Review the issue description above carefully — if anything seems incomplete or ambiguous, fetch the latest issue data via curl before proceeding
+1. **Fetch the complete Jira issue context** — do this first, before reading repos or writing the plan:
+   \`\`\`bash
+   curl -s "$JIRA_HOST/rest/api/3/issue/${issueKey}?fields=summary,description,comment,issuelinks,subtasks,parent,priority,labels,status" \\
+     -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
+     -H "Content-Type: application/json"
+   \`\`\`
+   You must read and understand all of the following from the response:
+   - **description** — authoritative source; the snapshot above may be stale
+   - **comments** — always read all of them; often contain clarifications, design decisions, or requirement corrections from the team
+   - **issuelinks** — "blocks", "is blocked by", "relates to" — reveals dependencies that may affect scope or sequencing
+   - **subtasks** — if present, determine which are in scope for this task
+   - **parent / epic** — provides the broader goal this issue belongs to
+   - **priority and labels** — may indicate urgency or special constraints
+
 2. Clone the repo(s) into /workspace as described above
+
 3. In each repo you will modify, create a new branch: \`git checkout -b claude/${issueKey}\`
+
 4. Run \`mise install\` if a runtime config file exists, then install project dependencies:
    ${buildDepsInstallTable()}
+
 5. Explore the codebase thoroughly:
    - If a \`CLAUDE.md\` exists in the repo root, read it first — it contains project-specific instructions
    - Understand the directory structure and architecture
    - Find existing code patterns and conventions (naming, formatting, imports)
    - Locate the test suite and understand how tests are written and run
    - Identify which files are most relevant to this task
+
 6. Write a detailed implementation plan to /workspace/.plan.md with the following sections:
    - **Task Summary**: One paragraph describing what needs to be done and why
+   - **Jira Context**: Key information from comments, linked issues, and subtasks that affects the plan — include any team clarifications, blocked-by dependencies, or epic context. This section lets the executor understand the full context without re-fetching Jira.
    - **Codebase Context**: Key conventions, patterns, and constraints you observed
    - **Setup**: Runtime/dependency install commands already run (so the executor can skip them)
    - **Files to Modify**: For each file, list the specific changes needed
    - **Files to Create**: For each new file, describe its purpose and content
    - **Test Strategy**: Which tests to run, what new tests to write
    - **Visual Verification** (REQUIRED — skip ONLY for pure backend tasks in repos with zero frontend code):
-     a. Find guide on how to run the app locally, through either repo(s) CLAUDE.md, README, or issue description
-     b. Describe the steps to run the app locally, including database setup, backend, docker containers, etc.
-     c. Include any authentication steps required to access the app, default credentials if available
-     d. Specify exactly which pages/components to open in the browser, what interactions to perform, and what the result should look like
-     e. The executor has a Playwright MCP server — write verification steps using \`browser_navigate\`, \`browser_click\`, \`browser_take_screenshot\`, etc.
-     f. Visual evidence is REQUIRED — the executor MUST upload final screenshot(s) to the Jira issue as proof. To upload, save with \`browser_take_screenshot\` then:
-        \`\`\`bash
-        ${jiraUploadScreenshotCmd(issueKey)}
-        \`\`\`
+     a. Find guide on how to run the app locally via repo \`CLAUDE.md\`, README, or issue description
+     b. Describe all steps to run the app locally — database setup, backend start, docker services, etc.
+     c. Include authentication steps and default credentials if available
+     d. Specify exactly which pages/components to open, what interactions to perform, and the expected result
+     e. Write Playwright MCP verification steps: \`browser_navigate\`, \`browser_click\`, \`browser_take_screenshot\`, etc.
+     f. **Visual evidence is REQUIRED** — the executor MUST upload final screenshot(s) to the Jira issue as proof:
+        - Step 1: Save screenshot to a fixed path using \`browser_take_screenshot\` with path argument \`/tmp/screenshot.jpeg\`
+        - Step 2: Upload it:
+          \`\`\`bash
+          ${jiraUploadScreenshotCmd(issueKey)}
+          \`\`\`
         Do NOT plan for base64 encoding — it bloats the context window and causes timeouts.
-     Include this upload step explicitly in the verification plan.
-   - **Done Criteria**: Exact conditions that must be true for the task to be complete
-   - **Completion Steps**: After the executor finishes, they should:
+        Include both steps explicitly in the verification plan.
+   - **Done Criteria**: Exact conditions that must all be true for the task to be complete. If any \`is blocked by\` linked issues are unresolved, note that the executor must flag this rather than proceeding.
+   - **Completion Steps**: After the executor finishes, they must:
+     - Push the branch and open a PR for each repo that has changes
+     - Post all PR URLs as a Jira comment (the executor prompt contains the curl command)
      ${jiraDoneTransitionId
-       ? `- Transition the issue to Done: \`${jiraTransitionCmd(issueKey, jiraDoneTransitionId)}\``
-       : '- Post all PR URLs as a comment on the Jira issue (see executor prompt for curl command)'}
+       ? `- Transition the issue to Done (the executor prompt contains the curl command with transition ID \`${jiraDoneTransitionId}\`)`
+       : ''}
 
 ## Critical Rules
 
 - Do NOT write any implementation code — only the plan
 - Do NOT open PRs or post Jira comments
-- The plan must be specific enough that another agent can implement it without reading the issue again
-- If anything in the description is ambiguous, document your interpretation in the plan
+- Step 1 (fetch Jira context) is mandatory — do not skip it even if the embedded description looks complete
+- The plan must be self-contained: the executor must be able to implement it without re-reading the Jira issue
+- Document your interpretation of any ambiguity so the executor does not have to guess
+- If the issue has unresolved \`is blocked by\` dependencies, state this prominently in the plan and Done Criteria
 ${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
 }
 
