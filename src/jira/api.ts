@@ -1,4 +1,6 @@
 import { config } from '../config.js';
+import { logger } from '../logger.js';
+import { textToAdf } from './adf.js';
 
 /** Jira REST API v3 path prefix */
 const API_V3 = '/rest/api/3';
@@ -36,27 +38,6 @@ async function jiraFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-/**
- * Convert plain text to Atlassian Document Format (ADF) for Jira comments.
- * Jira's REST API v3 requires ADF for all rich text fields.
- */
-export function textToAdf(text: string): object {
-  return {
-    version: 1,
-    type: 'doc',
-    content: [
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text,
-          },
-        ],
-      },
-    ],
-  };
-}
 
 /** File attachment metadata as returned by the Jira issue fields */
 export interface JiraAttachment {
@@ -175,4 +156,48 @@ export async function getJiraProjectStatuses(
     }
   }
   return statuses;
+}
+
+/**
+ * Resolve a Jira transition ID for the given issue.
+ *
+ * Resolution priority:
+ * 1. transitionConfig is null → return null (no transition configured)
+ * 2. transitionConfig.statusId is set → return it directly (no API call)
+ * 3. transitionConfig.status name → call getJiraTransitions, match case-insensitive
+ * 4. No match found → log warning and return null (bot continues working, transition skipped)
+ */
+export async function resolveJiraTransitionId(
+  issueKey: string,
+  transitionConfig: { statusId?: string; status?: string } | null,
+): Promise<string | null> {
+  if (!transitionConfig) return null;
+
+  if (transitionConfig.statusId) {
+    return transitionConfig.statusId;
+  }
+
+  if (!transitionConfig.status) return null;
+
+  try {
+    const transitions = await getJiraTransitions(issueKey);
+    const target = transitionConfig.status.toLowerCase();
+    const match = transitions.find((t) => t.name.toLowerCase() === target);
+    if (!match) {
+      logger.warn(
+        {
+          phase: 'jira',
+          issueKey,
+          status: transitionConfig.status,
+          available: transitions.map((t) => t.name),
+        },
+        'Jira transition not found by name — skipping transition',
+      );
+      return null;
+    }
+    return match.id;
+  } catch (err) {
+    logger.warn({ err, phase: 'jira', issueKey }, 'Failed to fetch Jira transitions — skipping transition');
+    return null;
+  }
 }
