@@ -106,6 +106,7 @@ if [ -f /workspace/.feedback-prompt ]; then
 
   # Pull latest changes in each repo so feedback sees any commits pushed since the last run
   echo "${GITHUB_TOKEN}" | gh auth login --with-token 2>/dev/null || true
+  git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GITHUB_TOKEN}"; }; f'
   for repo_dir in /workspace/*/; do
     if [ -d "${repo_dir}.git" ]; then
       git config --global --add safe.directory "$repo_dir"
@@ -209,6 +210,11 @@ git config --global user.email "${GIT_AUTHOR_EMAIL:-claude-swe@noreply.example.c
 
 # Auth gh CLI
 echo "${GITHUB_TOKEN}" | gh auth login --with-token 2>/dev/null || true
+
+# Configure git credential helper so the token is never embedded in remote URLs.
+# Claude can run `git push origin branch` directly — no need to inject the token manually.
+git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GITHUB_TOKEN}"; }; f'
+git config --global url."https://github.com/".insteadOf "git@github.com:"
 
 # Ensure worker user owns the workspace (PVC may be root-owned on first mount)
 chown -R worker:worker /workspace
