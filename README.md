@@ -267,14 +267,17 @@ JIRA_API_TOKEN=
 JIRA_WEBHOOK_SECRET=
 ```
 
-#### Webhook auto-registration
+#### Register the webhook manually (one-time setup)
 
-On startup the orchestrator automatically registers a Jira dynamic webhook via `POST /rest/api/3/webhook`. Dynamic webhooks expire after 30 days; the orchestrator refreshes them automatically on each restart when they are within 7 days of expiry.
+Jira Cloud's dynamic webhook API is restricted to Connect and OAuth 2.0 Marketplace apps — it cannot be used with a regular bot account's API token. You need to register the webhook once through the Jira admin UI:
 
-> **Permission required:** The bot account needs the **Administer Jira** global permission to register system-wide webhooks via the API. If the bot lacks this permission, webhook registration is skipped with a warning and manual setup instructions logged. You can then register the webhook manually:
-> 1. Go to Jira Settings → System → Webhooks → Create webhook
-> 2. URL: `https://your-server.example.com/webhooks/jira`
-> 3. Events: **Issue updated**, **Comment created**, **Issue deleted**
+1. Go to `https://yourorg.atlassian.net/plugins/servlet/webhooks`
+2. Click **Create a WebHook**
+3. **URL**: `https://your-server.example.com/webhooks/jira`
+4. **Events**: check **Issue → updated**, **Comment → created**, **Issue → deleted**
+5. Click **Save**
+
+The webhook does not expire (unlike the dynamic API variant). On startup the orchestrator logs the exact callback URL to use.
 
 #### Global mode: issue description format
 

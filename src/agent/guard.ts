@@ -19,10 +19,14 @@ export type GuardResult =
   | { type: 'operation'; action: string; target?: string };
 
 /**
- * Uses a cheap Haiku call to classify a Trello comment into one of three categories:
+ * Uses a cheap Haiku call to classify a comment into one of three categories:
  * - 'ignore': human-to-human conversation the agent should not act on
  * - 'feedback': feedback or instruction directed at the agent → spin up container
  * - 'operation': an operational command (stop, move, restart, archive) → execute inline
+ *
+ * `hint` is an optional extra sentence injected into the system prompt to provide
+ * platform-specific context (e.g. for Jira: the bot is the only assignee, so IGNORE
+ * should be rare).
  *
  * Defaults to { type: 'feedback' } (process the comment) on any error to avoid
  * accidentally suppressing legitimate feedback.
@@ -32,6 +36,7 @@ export async function classifyComment(
   commenterName: string,
   cardName: string,
   boardLists: { id: string; name: string }[],
+  hint?: string,
 ): Promise<GuardResult> {
   const apiKey = config.anthropic.apiKey;
   if (!apiKey) {
@@ -50,7 +55,7 @@ export async function classifyComment(
     const response = await client.messages.create({
       model: modelId,
       max_tokens: 50,
-      system: `You are a classifier for comments on a task with an AI coding agent assigned.
+      system: `You are a classifier for comments on a task with an AI coding agent assigned.${hint ? `\n${hint}` : ''}
 
 Classify the comment into exactly one category and reply with a single line:
 

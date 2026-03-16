@@ -113,6 +113,8 @@ const configSchema = z.object({
     apiToken: z.string().nullable().default(null),
     /** HMAC secret for webhook signature verification */
     webhookSecret: z.string().nullable().default(null),
+    /** Set to true after you have manually registered the Jira webhook — suppresses the setup reminder log */
+    webhookConfigured: z.boolean().default(false),
     /** Jira account ID of the bot user (resolved at startup if not set) */
     botAccountId: z.string().nullable().default(null),
     /** Global default: transition issue to this status when work starts (overridden per-project) */

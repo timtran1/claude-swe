@@ -168,7 +168,10 @@ async function routeJiraEvent(payload: JiraWebhookPayload): Promise<void> {
       }
     }
 
-    const commentText = adfToPlainText(comment.body);
+    // comment.body is ADF when it's an object; plain string on older webhook payloads
+    const commentText = typeof comment.body === 'string'
+      ? comment.body
+      : adfToPlainText(comment.body);
     const commenterName = comment.author.displayName;
     const cardName = issue.fields.summary;
 
@@ -179,6 +182,9 @@ async function routeJiraEvent(payload: JiraWebhookPayload): Promise<void> {
       commenterName,
       cardName,
       transitions, // transition names stand in for board lists for Jira
+      // Jira-specific hint: the bot is the sole assignee; comments are almost always
+      // directed at the agent. Only ignore obvious automated system messages.
+      'This is a Jira issue with the AI agent as the sole assignee. Unless the comment is clearly an automated system notification or explicitly addressed to another human, classify it as FEEDBACK.',
     );
 
     if (guardResult.type === 'ignore') {
