@@ -121,7 +121,7 @@ async function routeJiraEvent(payload: JiraWebhookPayload): Promise<void> {
       }
     }
 
-    // Issue deleted or moved to a done/closed category via status change
+    // Issue moved to a done/closed category via status change
     const statusChange = changelog.items.find((item) => item.field === 'status');
     if (statusChange) {
       const newStatus = (statusChange.toString ?? '').toLowerCase();
@@ -129,14 +129,23 @@ async function routeJiraEvent(payload: JiraWebhookPayload): Promise<void> {
         // Only clean up if bot is still (or was) assigned
         const assigneeId = issue.fields.assignee?.accountId;
         if (!jiraBotAccountId || assigneeId === jiraBotAccountId) {
-          log.info({ newStatus }, 'Issue moved to terminal status — enqueueing cleanup job');
-          const job: CleanupJob = {
-            cardShortLink: issueKey,
-            reason: 'archived',
-            source: { type: 'jira', issueId, issueKey, projectId },
-          };
-          await taskQueue.add('cleanup', job);
-          return;
+          // If the bot itself triggered the transition (task completion), skip cleanup so the
+          // container is preserved for follow-up feedback. Cleanup will happen naturally when
+          // the PR is merged/closed (GitHub webhook) or the issue is deleted.
+          // If a human manually closed the issue, proceed with cleanup as usual.
+          const changedByBot = jiraBotAccountId && user?.accountId === jiraBotAccountId;
+          if (changedByBot) {
+            log.info({ newStatus }, 'Bot transitioned issue to terminal status — skipping cleanup to preserve container for feedback');
+          } else {
+            log.info({ newStatus }, 'Issue moved to terminal status by user — enqueueing cleanup job');
+            const job: CleanupJob = {
+              cardShortLink: issueKey,
+              reason: 'archived',
+              source: { type: 'jira', issueId, issueKey, projectId },
+            };
+            await taskQueue.add('cleanup', job);
+            return;
+          }
         }
       }
     }
