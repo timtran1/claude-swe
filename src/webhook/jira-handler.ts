@@ -26,14 +26,8 @@ import type {
 /**
  * Verify a Jira webhook HMAC-SHA256 signature.
  * Jira signs the raw body with the webhook secret configured at registration time.
- * Returns true (with a warning) if no secret is configured.
  */
-function verifyJiraWebhookSignature(rawBody: Buffer, signature: string): boolean {
-  const secret = config.jira.webhookSecret;
-  if (!secret) {
-    logger.warn({ phase: 'webhook:jira' }, 'Jira webhookSecret not configured — skipping signature verification');
-    return true;
-  }
+function verifyJiraWebhookSignature(rawBody: Buffer, signature: string, secret: string): boolean {
   const expected = 'sha256=' + crypto
     .createHmac('sha256', secret)
     .update(rawBody)
@@ -53,8 +47,23 @@ function verifyJiraWebhookSignature(rawBody: Buffer, signature: string): boolean
 export function handleJiraWebhook(req: Request, res: Response): void {
   const signature = req.headers['x-hub-signature'] as string | undefined;
   const rawBody: Buffer = (req as Request & { rawBody: Buffer }).rawBody;
+  const secret = config.jira.webhookSecret;
 
-  if (signature && !verifyJiraWebhookSignature(rawBody, signature)) {
+  if (!secret) {
+    logger.warn(
+      { phase: 'webhook:jira' },
+      'Jira webhookSecret not configured — requests are not verified. ' +
+      'To secure the webhook: set JIRA_WEBHOOK_SECRET in .env and add "webhookSecret": "env.JIRA_WEBHOOK_SECRET" under jira in config.json.',
+    );
+  } else if (!signature) {
+    logger.warn(
+      { phase: 'webhook:jira' },
+      'Jira webhook received without x-hub-signature header — rejecting. ' +
+      'Ensure the Jira webhook was registered with the secret: Admin → System → Webhooks → set Secret to match JIRA_WEBHOOK_SECRET in .env.',
+    );
+    res.sendStatus(401);
+    return;
+  } else if (!verifyJiraWebhookSignature(rawBody, signature, secret)) {
     logger.warn({ phase: 'webhook:jira' }, 'Jira webhook signature verification failed');
     res.sendStatus(401);
     return;
