@@ -51,9 +51,11 @@ export interface TrelloWebhookPayload {
 // Discriminated union tracking which platform originated a task.
 // Trello source: cardId is the Trello card ID.
 // Slack source: channelId + threadTs identify the thread; trelloCardId is set if a card was linked.
+// Jira source: issueId + issueKey identify the Jira issue; projectId links it to a configured project.
 export type TaskSource =
   | { type: 'trello'; cardId: string }
-  | { type: 'slack'; channelId: string; threadTs: string; trelloCardId?: string };
+  | { type: 'slack'; channelId: string; threadTs: string; trelloCardId?: string }
+  | { type: 'jira'; issueId: string; issueKey: string; projectId: string };
 
 /** Derive the task source from a job, defaulting to Trello for backward compat. */
 export function getTaskSource(job: { source?: TaskSource; cardId?: string }): TaskSource {
@@ -87,6 +89,9 @@ export interface NewTaskJob {
   taskDescription?: string;
   // Slack file attachments to download inside the worker container
   slackFiles?: SlackFileRef[];
+  // Jira transition IDs resolved at enqueue time (require issue context — cannot defer to worker)
+  jiraDoingTransitionId?: string;
+  jiraDoneTransitionId?: string;
 }
 
 export interface FeedbackJob {
@@ -107,6 +112,11 @@ export interface FeedbackJob {
   repos?: string[];
   // Slack file attachments to download inside the worker container
   slackFiles?: SlackFileRef[];
+  // Jira transition IDs resolved at enqueue time
+  jiraDoingTransitionId?: string;
+  jiraDoneTransitionId?: string;
+  // Full comment history for Jira issues, fetched at enqueue time (plain text, oldest first)
+  jiraAllComments?: string;
 }
 
 export interface CleanupJob {
@@ -137,5 +147,46 @@ export interface GitHubPRWebhookPayload {
   };
   repository: {
     full_name: string;
+  };
+}
+
+/** A Jira issue as returned by the REST API (subset of fields we use) */
+export interface JiraIssue {
+  id: string;
+  /** Issue key, e.g. "PROJ-123" */
+  key: string;
+  /** REST API URL for this issue */
+  self: string;
+  fields: {
+    summary: string;
+    description: unknown; // ADF (Atlassian Document Format) object
+    status: { id: string; name: string };
+    assignee: { accountId: string; displayName: string } | null;
+    project: { id: string; key: string; name: string };
+    attachment?: Array<{ id: string; filename: string; mimeType: string; content: string }>;
+  };
+}
+
+/** Payload sent by Jira webhooks for issue and comment events */
+export interface JiraWebhookPayload {
+  /** e.g. "jira:issue_updated", "comment_created" */
+  webhookEvent: string;
+  /** e.g. "issue_assigned", "issue_comment_edited" */
+  issue_event_type_name?: string;
+  issue: JiraIssue;
+  comment?: {
+    id: string;
+    body: unknown; // ADF object
+    author: { accountId: string; displayName: string };
+  };
+  user: { accountId: string; displayName: string };
+  changelog?: {
+    items: Array<{
+      field: string;
+      fromString: string | null;
+      toString: string | null;
+      from: string | null;
+      to: string | null;
+    }>;
   };
 }

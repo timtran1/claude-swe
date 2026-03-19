@@ -46,6 +46,24 @@
       }
     }
   },
+  "jira": {
+    "host": "https://myorg.atlassian.net",
+    "email": "bot@myorg.com",
+    "apiToken": "env.JIRA_API_TOKEN",
+    "webhookSecret": "env.JIRA_WEBHOOK_SECRET",
+    "botAccountId": null,
+    "doing": { "status": "In Progress" },
+    "done": { "status": "Done" },
+    "projects": [
+      {
+        "key": "MYPROJ",
+        "includeStatuses": ["To Do", "Backlog"],
+        "doing": { "status": "In Progress" },
+        "done": { "status": "Done" },
+        "repos": ["https://github.com/myorg/my-app"]
+      }
+    ]
+  },
   "github": {
     "token": "env.GITHUB_TOKEN",
     "webhookSecret": "env.GITHUB_WEBHOOK_SECRET"

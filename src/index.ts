@@ -2,11 +2,14 @@ import express from 'express';
 import { config, resolveNames } from './config.js';
 import { logger } from './logger.js';
 import { handleTrelloWebhook, handleGitHubWebhook } from './webhook/handler.js';
+import { handleJiraWebhook } from './webhook/jira-handler.js';
 import { listWorkerContainers } from './containers/manager.js';
-import { worker, gracefulShutdown } from './queue/worker.js';
+import { gracefulShutdown } from './queue/worker.js';
 import { initBotMemberId } from './trello/bot.js';
+import { initJiraBotAccountId } from './jira/bot.js';
 import { handleLogViewer, handleLogStream } from './logs/handler.js';
 import { startSlack, isSlackConfigured } from './slack/client.js';
+import { registerJiraWebhooks } from './jira/webhooks.js';
 
 const app = express();
 
@@ -29,6 +32,7 @@ app.get('/health', (_req, res) => {
     github: config.github.token !== null,
     anthropic: config.anthropic.apiKey !== null,
     slack: isSlackConfigured(),
+    jira: !!(config.jira.host && config.jira.email && config.jira.apiToken),
   });
 });
 
@@ -47,6 +51,9 @@ app.all('/webhooks/trello', handleTrelloWebhook);
 
 // GitHub webhook — handles PR closed → container cleanup
 app.post('/webhooks/github', handleGitHubWebhook);
+
+// Jira webhook — handles issue assignment, comments, and unassignment
+app.post('/webhooks/jira', handleJiraWebhook);
 
 async function ensureTrelloWebhooks(): Promise<void> {
   const { apiKey, token, boards } = config.trello;
@@ -121,14 +128,19 @@ process.on('unhandledRejection', (reason) => {
 
 (async () => {
   await initBotMemberId();
+  await initJiraBotAccountId();
   await resolveNames();
-  await ensureTrelloWebhooks();
-  await startSlack();
 
   const server = app.listen(config.server.port, () => {
     logger.info({ port: config.server.port }, 'Webhook server listening');
     logger.info('Worker started and waiting for jobs');
   });
+
+  // Register webhooks AFTER server is listening — platforms verify the callback URL
+  // by sending a request during registration, so the server must be ready first.
+  await ensureTrelloWebhooks();
+  await registerJiraWebhooks();
+  await startSlack();
 
   async function shutdown(signal: string): Promise<void> {
     logger.info({ signal }, 'Shutting down');

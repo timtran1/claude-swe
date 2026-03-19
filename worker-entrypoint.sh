@@ -92,6 +92,8 @@ MCPEOF
 fi
 chown worker:worker "${WORKER_HOME}/.claude.json"
 echo "MCP config written to ${WORKER_HOME}/.claude.json"
+# Note: No Jira MCP server in v1 — issue details are embedded in prompts.
+# A future version may add a Jira MCP server here when one becomes available.
 
 # ---------------------------------------------------------------------------
 # Feedback fast-path: if the orchestrator wrote a prompt file to the workspace
@@ -104,6 +106,7 @@ if [ -f /workspace/.feedback-prompt ]; then
 
   # Pull latest changes in each repo so feedback sees any commits pushed since the last run
   echo "${GITHUB_TOKEN}" | gh auth login --with-token 2>/dev/null || true
+  git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GITHUB_TOKEN}"; }; f'
   for repo_dir in /workspace/*/; do
     if [ -d "${repo_dir}.git" ]; then
       git config --global --add safe.directory "$repo_dir"
@@ -119,6 +122,12 @@ if [ -f /workspace/.feedback-prompt ]; then
   if [ -n "${CARD_ID:-}" ]; then
     node /opt/mcp/download-images.mjs "${CARD_ID}" "$IMAGE_DIR" --comments "$COMMENT_IMAGE_DIR" \
       || echo "Warning: image download failed — continuing"
+  fi
+
+  # Re-download Jira issue attachments so Claude sees any new files added since last run
+  if [ -n "${JIRA_ISSUE_KEY:-}" ]; then
+    node /opt/mcp/download-jira-images.mjs "${JIRA_ISSUE_KEY}" "$IMAGE_DIR" \
+      || echo "Warning: Jira attachment download failed — continuing"
   fi
 
   # Download Slack file attachments if provided (feedback may include new screenshots)
@@ -166,6 +175,12 @@ if [ -n "${CARD_ID:-}" ]; then
     || echo "Warning: image download failed or no images found — continuing"
 fi
 
+# Download Jira issue attachments when running a Jira task
+if [ -n "${JIRA_ISSUE_KEY:-}" ]; then
+  node /opt/mcp/download-jira-images.mjs "${JIRA_ISSUE_KEY}" "$IMAGE_DIR" \
+    || echo "Warning: Jira attachment download failed — continuing"
+fi
+
 # Download Slack file attachments if provided
 if [ -n "${SLACK_FILE_URLS:-}" ] && [ -n "${SLACK_BOT_TOKEN:-}" ]; then
   echo "Downloading Slack file attachments..."
@@ -195,6 +210,10 @@ git config --global user.email "${GIT_AUTHOR_EMAIL:-claude-swe@noreply.example.c
 
 # Auth gh CLI
 echo "${GITHUB_TOKEN}" | gh auth login --with-token 2>/dev/null || true
+
+# Configure git credential helper so the token is never embedded in remote URLs.
+# Claude can run `git push origin branch` directly — no need to inject the token manually.
+git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GITHUB_TOKEN}"; }; f'
 
 # Ensure worker user owns the workspace (PVC may be root-owned on first mount)
 chown -R worker:worker /workspace

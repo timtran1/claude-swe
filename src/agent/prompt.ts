@@ -39,6 +39,48 @@ function repoToSlug(url: string): string {
   return url.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
 }
 
+/**
+ * Dependency install lookup table — reused across all prompt types that set up a workspace.
+ */
+function buildDepsInstallTable(): string {
+  return `| File present | Command |
+   |---|---|
+   | \`package-lock.json\` | \`npm ci\` |
+   | \`yarn.lock\` | \`yarn install --frozen-lockfile\` |
+   | \`pnpm-lock.yaml\` | \`pnpm install --frozen-lockfile\` |
+   | \`bun.lockb\` | \`bun install\` |
+   | \`requirements.txt\` | \`pip install -r requirements.txt\` |
+   | \`pyproject.toml\` + poetry | \`poetry install\` |
+   | \`pyproject.toml\` + uv | \`uv sync\` |
+   | \`Pipfile\` | \`pipenv install\` |
+   | \`go.mod\` | \`go mod download\` |
+   | \`Cargo.toml\` | \`cargo fetch\` |
+   | \`Gemfile\` | \`bundle install\``;
+}
+
+/**
+ * Pre-installed runtimes section — reused in execute and feedback prompts.
+ */
+function buildEnvironmentSection(): string {
+  return `## Environment
+
+The following runtimes are pre-installed via mise and available immediately (no download needed):
+- **Node.js**: 18, 20, 22
+- **Python**: 3.10, 3.11, 3.12, 3.13, 3.14
+- **Tools**: git, gh (GitHub CLI), docker CLI, imagemagick
+
+Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on a \`.mise.toml\` / \`.python-version\` / \`.nvmrc\` file in the repo.`;
+}
+
+/**
+ * Docker isolation and DOCKER_HOST rules — reused in every implementation prompt.
+ * @param taskId - The task/card/issue short ID used as the docker-compose project name.
+ */
+function buildDockerNote(taskId: string): string {
+  return `- If you use \`docker compose\` for test services, always pass \`--project-name claude-${taskId}\` so services are isolated and cleaned up automatically on exit
+- Docker is available in this environment via the \`$DOCKER_HOST\` environment variable — do not override or change \`DOCKER_HOST\``;
+}
+
 export function buildPlanPrompt(opts: NewTaskPromptOptions, additionalPrompt?: string): string {
   const { cardId, cardShortLink, cardName, cardUrl, repos, imageDir } = opts;
 
@@ -81,19 +123,7 @@ You have two MCP servers available — use their tools throughout this task:
 2. Clone the repo(s) into /workspace as described above
 3. In each repo you will modify, create a new branch: \`git checkout -b claude/${cardShortLink}\`
 4. Run \`mise install\` if a runtime config file exists, then install project dependencies:
-   | File present | Command |
-   |---|---|
-   | \`package-lock.json\` | \`npm ci\` |
-   | \`yarn.lock\` | \`yarn install --frozen-lockfile\` |
-   | \`pnpm-lock.yaml\` | \`pnpm install --frozen-lockfile\` |
-   | \`bun.lockb\` | \`bun install\` |
-   | \`requirements.txt\` | \`pip install -r requirements.txt\` |
-   | \`pyproject.toml\` + poetry | \`poetry install\` |
-   | \`pyproject.toml\` + uv | \`uv sync\` |
-   | \`Pipfile\` | \`pipenv install\` |
-   | \`go.mod\` | \`go mod download\` |
-   | \`Cargo.toml\` | \`cargo fetch\` |
-   | \`Gemfile\` | \`bundle install\` |
+   ${buildDepsInstallTable()}
 5. Explore the codebase thoroughly:
    - If a \`CLAUDE.md\` exists in the repo root, read it first — it contains project-specific instructions
    - Understand the directory structure and architecture
@@ -161,14 +191,7 @@ You have two MCP servers available — use their tools throughout this task:
 - **trello** — read cards, post comments, move cards (\`get_card\`, \`add_comment\`, \`move_card\`, etc.)
 - **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, \`browser_type\`, \`browser_snapshot\`, etc.). Chromium is pre-installed and runs headless. Use this to verify any frontend changes.
 
-## Environment
-
-The following runtimes are pre-installed via mise and available immediately (no download needed):
-- **Node.js**: 18, 20, 22
-- **Python**: 3.10, 3.11, 3.12, 3.13, 3.14
-- **Tools**: git, gh (GitHub CLI), docker CLI, imagemagick
-
-Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on a \`.mise.toml\` / \`.python-version\` / \`.nvmrc\` file in the repo.
+${buildEnvironmentSection()}
 
 ## Steps to Complete
 
@@ -199,8 +222,7 @@ Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on 
 - Do NOT move the card to Done until all tests pass
 - Do NOT open a PR if there are failing tests
 - Write clean, idiomatic code that matches the existing codebase style
-- If you use \`docker compose\` for test services, always pass \`--project-name claude-${cardShortLink}\` so services are isolated and cleaned up automatically on exit
-- Docker is available in this environment via the \`$DOCKER_HOST\` environment variable — do not override or change \`DOCKER_HOST\`
+${buildDockerNote(cardShortLink)}
 ${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
 }
 
@@ -249,19 +271,7 @@ ${buildRepoSection(repos)}
    - If a \`.mise.toml\`, \`.tool-versions\`, \`.nvmrc\`, or \`.python-version\` file exists,
      run \`mise install\` first to install the correct runtime version
    - Then install project dependencies based on what you find:
-     | File present | Command |
-     |---|---|
-     | \`package-lock.json\` | \`npm ci\` |
-     | \`yarn.lock\` | \`yarn install --frozen-lockfile\` |
-     | \`pnpm-lock.yaml\` | \`pnpm install --frozen-lockfile\` |
-     | \`bun.lockb\` | \`bun install\` |
-     | \`requirements.txt\` | \`pip install -r requirements.txt\` |
-     | \`pyproject.toml\` + poetry | \`poetry install\` |
-     | \`pyproject.toml\` + uv | \`uv sync\` |
-     | \`Pipfile\` | \`pipenv install\` |
-     | \`go.mod\` | \`go mod download\` |
-     | \`Cargo.toml\` | \`cargo fetch\` |
-     | \`Gemfile\` | \`bundle install\` |
+     ${buildDepsInstallTable()}
    - If installation fails, read the error and fix it (missing system dep, wrong node version, etc.)
 6. Implement the solution described in the card
 7. Run the project's test suite and fix any failures before proceeding
@@ -291,8 +301,7 @@ ${buildRepoSection(repos)}
 - Write clean, idiomatic code that matches the existing codebase style
 - If anything is unclear, make a reasonable implementation choice and document it
 - Prefer Trello MCP tools for reading/writing card data (get_card, add_comment, move_card, etc.) — use curl only for file uploads (attachments)
-- If you use \`docker compose\` for test services, always pass \`--project-name claude-${cardShortLink}\` so services are isolated and cleaned up automatically on exit
-- Docker is available in this environment via the \`$DOCKER_HOST\` environment variable — do not override or change \`DOCKER_HOST\`
+${buildDockerNote(cardShortLink)}
 ${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
 }
 
@@ -344,14 +353,7 @@ You have two MCP servers available — use their tools throughout this task:
 - **trello** — read cards, post comments, move cards (\`get_card\`, \`add_comment\`, \`move_card\`, etc.)
 - **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, \`browser_type\`, \`browser_snapshot\`, etc.). Chromium is pre-installed and runs headless. Use this to verify any frontend changes.
 
-## Environment
-
-The following runtimes are pre-installed via mise and available immediately (no download needed):
-- **Node.js**: 18, 20, 22
-- **Python**: 3.10, 3.11, 3.12, 3.13, 3.14
-- **Tools**: git, gh (GitHub CLI), docker CLI, imagemagick
-
-Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on a \`.mise.toml\` / \`.python-version\` / \`.nvmrc\` file in the repo.
+${buildEnvironmentSection()}
 
 ## Steps to Complete
 
@@ -391,8 +393,441 @@ ${doneListId ? `12. Move the Trello card back to Done using the trello MCP \`mov
 - Post your summary comment on the Trello card only — do NOT comment on the GitHub PR
 - Keep the response comment concise and factual
 - Prefer Trello MCP tools for reading/writing card data (get_card, add_comment, move_card, etc.) — use curl only for file uploads (attachments)
-- If you use \`docker compose\` for test services, always pass \`--project-name claude-${cardShortLink}\` so services are isolated and cleaned up automatically on exit
-- Docker is available in this environment via the \`$DOCKER_HOST\` environment variable — do not override or change \`DOCKER_HOST\`
+${buildDockerNote(cardShortLink)}
+${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
+}
+
+// --- Jira-originated task prompts ---
+
+interface JiraNewTaskPromptOptions {
+  issueKey: string;
+  issueUrl: string;
+  issueSummary: string;
+  /** Pre-converted from ADF to plain text */
+  issueDescription: string;
+  repos: string[];
+  imageDir?: string;
+  jiraHost: string;
+  jiraDoneTransitionId?: string;
+}
+
+interface JiraFeedbackPromptOptions {
+  issueKey: string;
+  issueUrl: string;
+  issueSummary: string;
+  commentText: string;
+  commenterName: string;
+  repos: string[];
+  imageDir?: string;
+  jiraHost: string;
+  jiraDoneTransitionId?: string;
+  /** Full comment history fetched at enqueue time (plain text, oldest first) */
+  allCommentsText?: string;
+}
+
+/** Curl command to upload a screenshot to a Jira issue as an attachment */
+function jiraUploadScreenshotCmd(issueKey: string): string {
+  return `curl -s -X POST "$JIRA_HOST/rest/api/3/issue/${issueKey}/attachments" \\
+  -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
+  -H "X-Atlassian-Token: no-check" \\
+  -F "file=@/tmp/screenshot.jpeg;type=image/jpeg"`;
+}
+
+/**
+ * Curl command to post a comment on a Jira issue using the v3 ADF API.
+ * messageVar is a placeholder — Claude should construct the full ADF body inline.
+ * For clickable links (e.g. PR URLs), use ADF link marks:
+ *   {"type":"text","text":"<label>","marks":[{"type":"link","attrs":{"href":"<url>"}}]}
+ */
+function jiraPostCommentCmd(issueKey: string, messageVar: string): string {
+  return `curl -s -X POST "$JIRA_HOST/rest/api/3/issue/${issueKey}/comment" \\
+  -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
+  -H "Content-Type: application/json" \\
+  -d '{"body":{"version":1,"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"'"${messageVar}"'"}]}]}}'
+
+# For rich comments with clickable links, construct the ADF body directly. Example with a PR link:
+# curl -s -X POST "$JIRA_HOST/rest/api/3/issue/${issueKey}/comment" \\
+#   -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
+#   -H "Content-Type: application/json" \\
+#   -d '{"body":{"version":1,"type":"doc","content":[{"type":"paragraph","content":[
+#     {"type":"text","text":"PR: "},
+#     {"type":"text","text":"owner/repo#123","marks":[{"type":"link","attrs":{"href":"https://github.com/owner/repo/pull/123"}}]},
+#     {"type":"text","text":" — summary of changes"}
+#   ]}]}}'`;
+}
+
+/** Curl command to transition a Jira issue to a new status */
+function jiraTransitionCmd(issueKey: string, transitionId: string): string {
+  return `curl -s -X POST "$JIRA_HOST/rest/api/3/issue/${issueKey}/transitions" \\
+  -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
+  -H "Content-Type: application/json" \\
+  -d '{"transition":{"id":"${transitionId}"}}'`;
+}
+
+export function buildJiraPlanPrompt(opts: JiraNewTaskPromptOptions, additionalPrompt?: string): string {
+  const { issueKey, issueUrl, issueSummary, issueDescription, repos, imageDir, jiraDoneTransitionId } = opts;
+
+  const imageSection = imageDir
+    ? `
+## Issue Attachments
+
+All attachments from the Jira issue have been downloaded to ${imageDir}/.
+- **Images** (screenshots, mockups): study them carefully — they are the visual specification for this task.
+- **Documents** (.md, .txt, .pdf, etc.): read them — they may contain conventions, specs, or requirements.
+`
+    : '';
+
+  return `
+You are a senior software architect planning a task for another AI agent to implement.
+
+## Your Task
+
+Jira issue: "${issueSummary}"
+Issue URL: ${issueUrl}
+Issue Key: ${issueKey}
+
+## Issue Description (snapshot — may be stale)
+
+${issueDescription || '(No description provided)'}
+${imageSection}
+## Repository
+
+${buildRepoSection(repos)}
+
+## Available MCP Servers
+
+You have one MCP server available:
+- **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, \`browser_type\`, \`browser_snapshot\`, etc.). Chromium is pre-installed and runs headless.
+
+There is no Jira MCP server — use \`curl\` for all Jira API interactions.
+Credentials are in env vars: \`$JIRA_HOST\`, \`$JIRA_EMAIL\`, \`$JIRA_API_TOKEN\`.
+
+## What You Must Do
+
+1. **Fetch the complete Jira issue context** — do this first, before reading repos or writing the plan:
+   \`\`\`bash
+   curl -s "$JIRA_HOST/rest/api/3/issue/${issueKey}?fields=summary,description,comment,issuelinks,subtasks,parent,priority,labels,status" \\
+     -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
+     -H "Content-Type: application/json"
+   \`\`\`
+   You must read and understand all of the following from the response:
+   - **description** — authoritative source; the snapshot above may be stale
+   - **comments** — always read all of them; often contain clarifications, design decisions, or requirement corrections from the team
+   - **issuelinks** — "blocks", "is blocked by", "relates to" — reveals dependencies that may affect scope or sequencing
+   - **subtasks** — if present, determine which are in scope for this task
+   - **parent / epic** — provides the broader goal this issue belongs to
+   - **priority and labels** — may indicate urgency or special constraints
+
+2. Clone the repo(s) into /workspace as described above
+
+3. In each repo you will modify, create a new branch: \`git checkout -b claude/${issueKey}\`
+
+4. Run \`mise install\` if a runtime config file exists, then install project dependencies:
+   ${buildDepsInstallTable()}
+
+5. Explore the codebase thoroughly:
+   - If a \`CLAUDE.md\` exists in the repo root, read it first — it contains project-specific instructions
+   - Understand the directory structure and architecture
+   - Find existing code patterns and conventions (naming, formatting, imports)
+   - Locate the test suite and understand how tests are written and run
+   - Identify which files are most relevant to this task
+
+6. Write a detailed implementation plan to /workspace/.plan.md with the following sections:
+   - **Task Summary**: One paragraph describing what needs to be done and why
+   - **Jira Context**: Key information from comments, linked issues, and subtasks that affects the plan — include any team clarifications, blocked-by dependencies, or epic context. This section lets the executor understand the full context without re-fetching Jira.
+   - **Codebase Context**: Key conventions, patterns, and constraints you observed
+   - **Setup**: Runtime/dependency install commands already run (so the executor can skip them)
+   - **Files to Modify**: For each file, list the specific changes needed
+   - **Files to Create**: For each new file, describe its purpose and content
+   - **Test Strategy**: Which tests to run, what new tests to write
+   - **Visual Verification** (REQUIRED — skip ONLY for pure backend tasks in repos with zero frontend code):
+     a. Find guide on how to run the app locally via repo \`CLAUDE.md\`, README, or issue description
+     b. Describe all steps to run the app locally — database setup, backend start, docker services, etc.
+     c. Include authentication steps and default credentials if available
+     d. Specify exactly which pages/components to open, what interactions to perform, and the expected result
+     e. Write Playwright MCP verification steps: \`browser_navigate\`, \`browser_click\`, \`browser_take_screenshot\`, etc.
+     f. **Visual evidence is REQUIRED** — the executor MUST upload final screenshot(s) to the Jira issue as proof:
+        - Step 1: Save screenshot to a fixed path using \`browser_take_screenshot\` with path argument \`/tmp/screenshot.jpeg\`
+        - Step 2: Upload it:
+          \`\`\`bash
+          ${jiraUploadScreenshotCmd(issueKey)}
+          \`\`\`
+        Do NOT plan for base64 encoding — it bloats the context window and causes timeouts.
+        Include both steps explicitly in the verification plan.
+   - **Done Criteria**: Exact conditions that must all be true for the task to be complete. If any \`is blocked by\` linked issues are unresolved, note that the executor must flag this rather than proceeding.
+   - **Completion Steps**: After the executor finishes, they must:
+     - Push the branch and open a PR for each repo that has changes
+     - Post all PR URLs as a Jira comment (the executor prompt contains the curl command)
+     ${jiraDoneTransitionId
+       ? `- Transition the issue to Done (the executor prompt contains the curl command with transition ID \`${jiraDoneTransitionId}\`)`
+       : ''}
+
+## Critical Rules
+
+- Do NOT write any implementation code — only the plan
+- Do NOT open PRs or post Jira comments
+- Step 1 (fetch Jira context) is mandatory — do not skip it even if the embedded description looks complete
+- The plan must be self-contained: the executor must be able to implement it without re-reading the Jira issue
+- Document your interpretation of any ambiguity so the executor does not have to guess
+- If the issue has unresolved \`is blocked by\` dependencies, state this prominently in the plan and Done Criteria
+${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
+}
+
+export function buildJiraExecutePrompt(opts: JiraNewTaskPromptOptions, additionalPrompt?: string): string {
+  const { issueKey, issueUrl, issueSummary, imageDir, jiraDoneTransitionId } = opts;
+
+  const imageSection = imageDir
+    ? `
+## Issue Attachments
+
+All attachments from the Jira issue are in ${imageDir}/.
+- **Images**: study them before implementing any UI changes — they are the visual specification.
+- **Documents** (.md, .txt, .pdf, etc.): read them — they may contain conventions, specs, or requirements.
+`
+    : '';
+
+  const doneStep = jiraDoneTransitionId
+    ? `9. Transition the Jira issue to Done:
+   \`\`\`bash
+   ${jiraTransitionCmd(issueKey, jiraDoneTransitionId)}
+   \`\`\``
+    : `9. (No Done transition configured — issue will remain in its current status)`;
+
+  return `
+You are an autonomous software engineer implementing a planned task.
+
+## Context
+
+Jira issue: "${issueSummary}"
+Issue URL: ${issueUrl}
+Issue Key: ${issueKey}
+
+The workspace is already prepared:
+- The repo(s) have been cloned into /workspace (each in its own subdirectory)
+- The branch \`claude/${issueKey}\` has been created and checked out in each repo that requires changes
+- Runtime and dependencies have been installed
+- A detailed implementation plan is at /workspace/.plan.md
+${imageSection}
+## Available MCP Servers
+
+You have one MCP server available:
+- **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, \`browser_type\`, \`browser_snapshot\`, etc.). Chromium is pre-installed and runs headless.
+
+There is no Jira MCP server — use \`curl\` with Basic Auth to interact with the Jira API.
+Credentials are available as environment variables: \`$JIRA_HOST\`, \`$JIRA_EMAIL\`, \`$JIRA_API_TOKEN\`.
+
+${buildEnvironmentSection()}
+
+## Steps to Complete
+
+1. Read /workspace/.plan.md — this is your specification, follow it precisely
+2. In each repo under /workspace, read \`CLAUDE.md\` in the root if it exists — it contains project-specific instructions for code style, build commands, and conventions
+3. Implement every change described in the plan
+4. Run the test suite as specified in the plan — fix any failures before proceeding
+5. Visual verification — follow the visual verification plan in /workspace/.plan.md. REQUIRED for any task touching frontend code, UI components, styles, or pages. Skip ONLY for purely backend tasks with zero frontend files changed:
+   - Run the project locally as specified in the plan
+   - Use the Playwright MCP tools (\`browser_navigate\`, \`browser_take_screenshot\`, etc.) to open the relevant pages
+   - Take screenshots and verify the result looks correct
+   - If reference images exist in ${imageDir || '/workspace/.card-images'}/, compare against them and iterate until they match
+   - Do NOT commit until the UI looks right
+   - **Visual evidence is REQUIRED**: after verification passes, upload the final screenshot(s) to the Jira issue:
+     \`\`\`bash
+     ${jiraUploadScreenshotCmd(issueKey)}
+     \`\`\`
+     Do NOT use base64 or browser_run_code for screenshots.
+6. Commit all changes with a clear, descriptive message (do this in each repo that has changes)
+7. For each repo with changes, push the branch and open a PR using the gh CLI:
+   \`gh pr create --title "${issueSummary}" --body "<summary of changes>"\`
+8. Post all PR URLs as a comment on the Jira issue:
+   \`\`\`bash
+   ${jiraPostCommentCmd(issueKey, 'PR: <url>')}
+   \`\`\`
+${doneStep}
+
+## Important Rules
+
+- Follow the plan — if you need to deviate, document why in the PR body
+- Do NOT transition the issue to Done until all tests pass
+- Do NOT open a PR if there are failing tests
+- Write clean, idiomatic code that matches the existing codebase style
+${buildDockerNote(issueKey)}
+${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
+}
+
+export function buildJiraNewTaskPrompt(opts: JiraNewTaskPromptOptions, additionalPrompt?: string): string {
+  const { issueKey, issueUrl, issueSummary, issueDescription, repos, imageDir, jiraDoneTransitionId } = opts;
+
+  const imageSection = imageDir
+    ? `
+## Issue Attachments
+
+All attachments from the Jira issue have been downloaded to ${imageDir}/.
+- **Images** (screenshots, mockups): study them carefully before writing any code — they are the visual specification for this task.
+- **Documents** (.md, .txt, .pdf, etc.): read them — they may contain conventions, specs, or requirements.
+`
+    : '';
+
+  const doneStep = jiraDoneTransitionId
+    ? `11. Transition the Jira issue to Done:
+    \`\`\`bash
+    ${jiraTransitionCmd(issueKey, jiraDoneTransitionId)}
+    \`\`\``
+    : `11. (No Done transition configured — issue will remain in its current status)`;
+
+  return `
+You are an autonomous software engineer working on a task from Jira.
+
+## Your Task
+
+Jira issue: "${issueSummary}"
+Issue URL: ${issueUrl}
+Issue Key: ${issueKey}
+
+## Issue Description
+
+${issueDescription || '(No description provided)'}
+${imageSection}
+## Available MCP Servers
+
+You have one MCP server available:
+- **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, \`browser_type\`, \`browser_snapshot\`, etc.). Chromium is pre-installed and runs headless.
+
+There is no Jira MCP server. Use \`curl\` with Basic Auth for all Jira interactions (comments, attachments, transitions).
+Credentials are available as environment variables: \`$JIRA_HOST\`, \`$JIRA_EMAIL\`, \`$JIRA_API_TOKEN\`.
+The issue description above is a snapshot — if it seems incomplete, fetch the latest via:
+\`\`\`bash
+curl -s "$JIRA_HOST/rest/api/3/issue/${issueKey}?fields=summary,description,comment" \\
+  -H "Authorization: Basic $(echo -n "$JIRA_EMAIL:$JIRA_API_TOKEN" | base64 | tr -d '\\n')" \\
+  -H "Content-Type: application/json"
+\`\`\`
+
+## Repository
+
+${buildRepoSection(repos)}
+
+## Steps to Complete
+
+1. Review the issue description above carefully — it is the complete specification
+2. Clone the repo(s) into /workspace as described above
+3. In each repo you will modify, create a new branch: \`git checkout -b claude/${issueKey}\`
+4. In each repo, read \`CLAUDE.md\` in the root if it exists, then explore the codebase to understand its structure and conventions
+5. Set up the runtime and install dependencies:
+   - If a \`.mise.toml\`, \`.tool-versions\`, \`.nvmrc\`, or \`.python-version\` file exists,
+     run \`mise install\` first to install the correct runtime version
+   - Then install project dependencies based on what you find:
+     ${buildDepsInstallTable()}
+6. Implement the solution described in the issue
+7. Run the project's test suite and fix any failures before proceeding
+8. Visual verification — REQUIRED for any task that touches frontend code, UI components, styles, or pages. Skip ONLY if the task is purely backend with zero frontend files changed:
+   a. Start the dev server (e.g. \`npm run dev\`)
+   b. Use the Playwright MCP tools (\`browser_navigate\`, \`browser_click\`, \`browser_take_screenshot\`, etc.) to open the relevant pages
+   c. Take screenshots and verify the result looks correct
+   d. If reference images exist in ${imageDir || '/workspace/.card-images'}/, compare against them and iterate until they match
+   e. Fix, screenshot, compare — keep iterating until the UI is correct
+   f. Do NOT move forward until the UI visually matches the expected result
+   g. **Visual evidence is REQUIRED**: after verification passes, upload the final screenshot(s) to the Jira issue:
+      \`\`\`bash
+      ${jiraUploadScreenshotCmd(issueKey)}
+      \`\`\`
+      Do NOT use base64 or browser_run_code for screenshots.
+9. Commit all changes with a clear, descriptive message (do this in each repo that has changes)
+10. For each repo with changes, push the branch and open a PR using the gh CLI:
+    \`gh pr create --title "${issueSummary}" --body "<summary of changes>"\`
+    Then post all PR URLs as a Jira comment:
+    \`\`\`bash
+    ${jiraPostCommentCmd(issueKey, 'PR: <url>')}
+    \`\`\`
+${doneStep}
+
+## Important Rules
+
+- Do NOT transition the issue to Done until tests pass
+- Do NOT open a PR if there are failing tests
+- Write clean, idiomatic code that matches the existing codebase style
+- If anything is unclear, make a reasonable implementation choice and document it in the PR body
+${buildDockerNote(issueKey)}
+${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
+}
+
+export function buildJiraFeedbackPrompt(opts: JiraFeedbackPromptOptions, additionalPrompt?: string): string {
+  const { issueKey, issueUrl, issueSummary, commentText, commenterName, imageDir, jiraDoneTransitionId, allCommentsText } = opts;
+
+  const imageSection = imageDir
+    ? `
+## Attachments
+
+Files from the Jira issue have been downloaded to ${imageDir}/.
+- **Images**: visual specifications and reference screenshots.
+- **Documents** (.md, .txt, .pdf, etc.): conventions, specs, or requirements — read them.
+`
+    : '';
+
+  const doneStep = jiraDoneTransitionId
+    ? `9. Transition the Jira issue back to Done:
+   \`\`\`bash
+   ${jiraTransitionCmd(issueKey, jiraDoneTransitionId)}
+   \`\`\``
+    : '';
+
+  return `
+You are an autonomous software engineer handling review feedback on a pull request.
+
+## Feedback Received
+
+Jira issue: "${issueSummary}"
+Issue URL: ${issueUrl}
+Issue Key: ${issueKey}
+Reviewer: ${commenterName}
+
+${allCommentsText
+  ? `## Full Comment History\n\n${allCommentsText}\n\n**Latest comment (actionable feedback):** "${commentText}"`
+  : `Latest comment: "${commentText}"`}
+${imageSection}
+## Available MCP Servers
+
+You have one MCP server available:
+- **playwright** — browser automation for visual verification (\`browser_navigate\`, \`browser_take_screenshot\`, \`browser_click\`, \`browser_type\`, \`browser_snapshot\`, etc.). Chromium is pre-installed and runs headless.
+
+There is no Jira MCP server — use \`curl\` with Basic Auth for Jira API interactions.
+Credentials are available as environment variables: \`$JIRA_HOST\`, \`$JIRA_EMAIL\`, \`$JIRA_API_TOKEN\`.
+
+${buildEnvironmentSection()}
+
+## Steps to Complete
+
+1. Read /workspace/.plan.md if it exists — it contains the original implementation plan and is essential context
+2. Review the full comment history above to understand the context, then focus on the latest comment from ${commenterName} as the actionable feedback
+3. Understand what change or fix the reviewer is asking for
+4. In each repo under /workspace, read \`CLAUDE.md\` in the root if it exists — it contains project-specific instructions
+5. Run \`mise install\` if a runtime config file exists, then install project dependencies
+6. Implement the requested changes
+7. Run the test suite and ensure all tests pass
+8. Visual verification — REQUIRED for any changes that touch frontend code, UI components, styles, or pages. Skip ONLY if changes are purely backend with zero frontend files changed:
+   a. Start the dev server and use the Playwright MCP tools (\`browser_navigate\`, \`browser_click\`, \`browser_take_screenshot\`, etc.) to open the relevant pages
+   b. Take screenshots and verify the updated UI looks correct
+   c. Check /workspace/.card-images/ for any reference images and compare against them
+   d. Iterate until the UI is correct — do NOT commit until it looks right
+   e. **Visual evidence is REQUIRED**: after verification passes, upload the final screenshot(s) to the Jira issue:
+      \`\`\`bash
+      ${jiraUploadScreenshotCmd(issueKey)}
+      \`\`\`
+      Do NOT use base64 or browser_run_code for screenshots.
+9. Commit and push your changes:
+   - Check if the branch still exists on the remote: \`git ls-remote --heads origin claude/${issueKey}\`
+   - If it exists: push to it (the PR should still be open)
+   - If it was deleted (previous PR was merged/closed): create the branch fresh and open a new PR with \`gh pr create\`
+   - Then post a summary as a Jira comment:
+     \`\`\`bash
+     ${jiraPostCommentCmd(issueKey, 'Done: <summary of changes>')}
+     \`\`\`
+${doneStep}
+
+## Important Rules
+
+- Only make changes directly related to the feedback
+- Push to the existing branch if it still exists; if the branch was deleted, create it fresh and open a new PR
+- Keep the Jira comment concise and factual — summarize what changed, nothing more
+${buildDockerNote(issueKey)}
 ${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
 }
 
@@ -454,19 +889,7 @@ You have two MCP servers available — use their tools throughout this task:
    - If a \`.mise.toml\`, \`.tool-versions\`, \`.nvmrc\`, or \`.python-version\` file exists,
      run \`mise install\` first to install the correct runtime version
    - Then install project dependencies based on what you find:
-     | File present | Command |
-     |---|---|
-     | \`package-lock.json\` | \`npm ci\` |
-     | \`yarn.lock\` | \`yarn install --frozen-lockfile\` |
-     | \`pnpm-lock.yaml\` | \`pnpm install --frozen-lockfile\` |
-     | \`bun.lockb\` | \`bun install\` |
-     | \`requirements.txt\` | \`pip install -r requirements.txt\` |
-     | \`pyproject.toml\` + poetry | \`poetry install\` |
-     | \`pyproject.toml\` + uv | \`uv sync\` |
-     | \`Pipfile\` | \`pipenv install\` |
-     | \`go.mod\` | \`go mod download\` |
-     | \`Cargo.toml\` | \`cargo fetch\` |
-     | \`Gemfile\` | \`bundle install\` |
+     ${buildDepsInstallTable()}
 5. Implement the solution described in the task
 6. Run the project's test suite and fix any failures before proceeding
 7. If this task involves any UI or frontend changes, do browser verification:
@@ -488,8 +911,7 @@ You have two MCP servers available — use their tools throughout this task:
 - Do NOT open a PR if there are failing tests
 - Write clean, idiomatic code that matches the existing codebase style
 - If anything is unclear, make a reasonable implementation choice and document it
-- If you use \`docker compose\` for test services, always pass \`--project-name claude-${taskId}\` so services are isolated and cleaned up automatically on exit
-- Docker is available in this environment via the \`$DOCKER_HOST\` environment variable — do not override or change \`DOCKER_HOST\`
+${buildDockerNote(taskId)}
 ${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
 }
 
@@ -532,14 +954,7 @@ You are an autonomous software engineer handling review feedback on a pull reque
 Reviewer: ${commenterName}
 Latest comment: "${commentText}"
 ${trelloSection}${imageSection}
-## Environment
-
-The following runtimes are pre-installed via mise and available immediately (no download needed):
-- **Node.js**: 18, 20, 22
-- **Python**: 3.10, 3.11, 3.12, 3.13, 3.14
-- **Tools**: git, gh (GitHub CLI), docker CLI, imagemagick
-
-Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on a \`.mise.toml\` / \`.python-version\` / \`.nvmrc\` file in the repo.
+${buildEnvironmentSection()}
 
 ## Steps to Complete
 
@@ -566,7 +981,6 @@ Use \`mise use <runtime>@<version>\` to activate a specific version, or rely on 
 - Only make changes directly related to the feedback
 - Push to the existing branch if it still exists; if the branch was deleted, create it fresh and open a new PR
 - Keep changes focused and minimal
-- If you use \`docker compose\` for test services, always pass \`--project-name claude-${taskId}\` so services are isolated and cleaned up automatically on exit
-- Docker is available in this environment via the \`$DOCKER_HOST\` environment variable — do not override or change \`DOCKER_HOST\`
+${buildDockerNote(taskId)}
 ${additionalPrompt ? `\n## Additional Instructions\n\n${additionalPrompt}` : ''}`.trim();
 }

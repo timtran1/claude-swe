@@ -10,10 +10,15 @@ import {
   buildFeedbackPrompt,
   buildSlackNewTaskPrompt,
   buildSlackFeedbackPrompt,
+  buildJiraPlanPrompt,
+  buildJiraExecutePrompt,
+  buildJiraNewTaskPrompt,
+  buildJiraFeedbackPrompt,
 } from '../agent/prompt.js';
 import { getBoardRepos, getAllRepoSlugs } from '../workspace/repo.js';
 import { findOpenPRsForBranch } from '../github/pr.js';
 import { moveCardToList } from '../trello/api.js';
+import { transitionJiraIssue } from '../jira/api.js';
 import { postStatus } from '../notify.js';
 import { getTaskSource } from '../webhook/types.js';
 import { createLogSession, removeLogSessionByCard } from '../logs/store.js';
@@ -85,10 +90,23 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
   const planModel = models.plan;
   const executeModel = models.execute;
 
-  // Build extraEnv for Slack file attachments
+  // Build extraEnv — Slack file attachments + Jira credentials (merged)
   const slackFiles = job.data.slackFiles;
+  const slackExtraEnv: Record<string, string> =
+    slackFiles && slackFiles.length > 0 ? { SLACK_FILE_URLS: JSON.stringify(slackFiles) } : {};
+  const jiraExtraEnv: Record<string, string> =
+    source.type === 'jira'
+      ? {
+          JIRA_HOST: config.jira.host ?? '',
+          JIRA_EMAIL: config.jira.email ?? '',
+          JIRA_API_TOKEN: config.jira.apiToken ?? '',
+          JIRA_ISSUE_KEY: source.issueKey,
+          JIRA_DONE_TRANSITION_ID: job.data.jiraDoneTransitionId ?? '',
+        }
+      : {};
+  const mergedEnv = { ...slackExtraEnv, ...jiraExtraEnv };
   const extraEnv: Record<string, string> | undefined =
-    slackFiles && slackFiles.length > 0 ? { SLACK_FILE_URLS: JSON.stringify(slackFiles) } : undefined;
+    Object.keys(mergedEnv).length > 0 ? mergedEnv : undefined;
 
   let containerOpts: Parameters<typeof runTaskInContainer>[0];
 
@@ -103,6 +121,28 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
     }, prompts.newTask);
     log.info({ promptLength: prompt.length }, 'Built Slack single-phase prompt');
     containerOpts = { cardShortLink, cardId: cardId ?? '', branchName, prompt, executeModel, isFollowUp: false, extraEnv };
+  } else if (source.type === 'jira') {
+    // Jira tasks: repos pre-resolved, description embedded inline, no MCP server
+    const jiraOpts = {
+      issueKey: source.issueKey,
+      issueUrl: job.data.cardUrl,
+      issueSummary: cardName,
+      issueDescription: job.data.cardDesc ?? '',
+      repos,
+      imageDir: '/workspace/.card-images',
+      jiraHost: config.jira.host ?? '',
+      jiraDoneTransitionId: job.data.jiraDoneTransitionId,
+    };
+    if (planMode) {
+      const planPrompt = buildJiraPlanPrompt(jiraOpts, prompts.plan);
+      const executePrompt = buildJiraExecutePrompt(jiraOpts, prompts.execute);
+      log.info({ planPromptLength: planPrompt.length, executePromptLength: executePrompt.length }, 'Built Jira two-phase prompts');
+      containerOpts = { cardShortLink, cardId: '', branchName, planPrompt, executePrompt, planModel, executeModel, isFollowUp: false, extraEnv };
+    } else {
+      const prompt = buildJiraNewTaskPrompt(jiraOpts, prompts.newTask);
+      log.info({ promptLength: prompt.length }, 'Built Jira single-phase prompt');
+      containerOpts = { cardShortLink, cardId: '', branchName, prompt, executeModel, isFollowUp: false, extraEnv };
+    }
   } else if (planMode) {
     const promptOpts = {
       cardId: cardId!,
@@ -130,6 +170,14 @@ async function handleNewTask(job: Job<NewTaskJob>): Promise<void> {
     const prompt = buildNewTaskPrompt(promptOpts, prompts.newTask);
     log.info({ promptLength: prompt.length }, 'Built single-phase prompt (planMode disabled)');
     containerOpts = { cardShortLink, cardId: cardId!, branchName, prompt, executeModel, isFollowUp: false, doneListId: job.data.doneListId };
+  }
+
+  // Transition Jira issue to Doing status at task start
+  if (source.type === 'jira' && job.data.jiraDoingTransitionId) {
+    await transitionJiraIssue(source.issueKey, job.data.jiraDoingTransitionId).catch((err) =>
+      log.warn({ err }, 'Failed to transition Jira issue to Doing — continuing'),
+    );
+    log.info({ jiraDoingTransitionId: job.data.jiraDoingTransitionId }, 'Transitioned Jira issue to Doing');
   }
 
   // Move Trello card to Doing list if configured
@@ -231,10 +279,23 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
   const repos = job.data.repos ?? (boardId ? getBoardRepos(boardId) : []);
   log.info({ branchName, repos }, 'Resolved branch and repos for feedback');
 
-  // Build extraEnv for Slack file attachments
+  // Build extraEnv — Slack file attachments + Jira credentials (merged)
   const feedbackSlackFiles = job.data.slackFiles;
+  const feedbackSlackEnv: Record<string, string> =
+    feedbackSlackFiles && feedbackSlackFiles.length > 0 ? { SLACK_FILE_URLS: JSON.stringify(feedbackSlackFiles) } : {};
+  const feedbackJiraEnv: Record<string, string> =
+    source.type === 'jira'
+      ? {
+          JIRA_HOST: config.jira.host ?? '',
+          JIRA_EMAIL: config.jira.email ?? '',
+          JIRA_API_TOKEN: config.jira.apiToken ?? '',
+          JIRA_ISSUE_KEY: source.issueKey,
+          JIRA_DONE_TRANSITION_ID: job.data.jiraDoneTransitionId ?? '',
+        }
+      : {};
+  const feedbackMergedEnv = { ...feedbackSlackEnv, ...feedbackJiraEnv };
   const feedbackExtraEnv: Record<string, string> | undefined =
-    feedbackSlackFiles && feedbackSlackFiles.length > 0 ? { SLACK_FILE_URLS: JSON.stringify(feedbackSlackFiles) } : undefined;
+    Object.keys(feedbackMergedEnv).length > 0 ? feedbackMergedEnv : undefined;
 
   let prompt: string;
   if (source.type === 'slack') {
@@ -245,6 +306,19 @@ async function handleFeedback(job: Job<FeedbackJob>): Promise<void> {
       repos,
       imageDir: '/workspace/.card-images',
       trelloCardUrl: source.trelloCardId ? `https://trello.com/c/${source.trelloCardId}` : undefined,
+    }, config.agent.prompts.feedback);
+  } else if (source.type === 'jira') {
+    prompt = buildJiraFeedbackPrompt({
+      issueKey: source.issueKey,
+      issueUrl: job.data.cardUrl,
+      issueSummary: cardName,
+      commentText,
+      commenterName,
+      repos,
+      imageDir: '/workspace/.card-images',
+      jiraHost: config.jira.host ?? '',
+      jiraDoneTransitionId: job.data.jiraDoneTransitionId,
+      allCommentsText: job.data.jiraAllComments,
     }, config.agent.prompts.feedback);
   } else {
     prompt = buildFeedbackPrompt({
